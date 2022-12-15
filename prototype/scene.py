@@ -88,6 +88,16 @@ class pnet(Scene):
 
     # Move dots backwards from one triangle to another
     self.inference_backprop(updated_nodes, errors, weights)
+
+    # Mutate triangle error colors after backwards pass
+    animations = []
+    for i in range(1, len(errors) - 1):
+      # Randomly mutate the triangle error but limit it to the max error of the next layer
+      max_error = max(map(lambda x: gray_value(x.get_fill_color()), errors[i + 1]))
+      for error in errors[i]:
+        animations.append(error.animate.set_fill_color(interpolate_color(BLACK, RED, random.uniform(0, max_error))))
+
+    self.play(AnimationGroup(*animations))
     
   def inference_error(self, updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]]):
     # Create the dots and trails representing the pulse to the error node
