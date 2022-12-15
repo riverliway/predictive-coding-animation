@@ -75,7 +75,19 @@ class pnet(Scene):
     return predicted_nodes[0:-1] + [label_nodes]
 
   def inference(self, predicted_nodes: list[list[Circle]], updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]]):
-    pass
+    # Create the dots and trails representing the pulse to the error node
+    error_pulses = [[Dot(n.get_center(), z_index=7, color=RED, fill_opacity=1) for n in layer] for layer in updated_nodes]
+    create_trail = lambda p, w: TracedPath(p.get_center, dissipating_time=0.5, z_index=6, stroke_color=RED, stroke_width=w.get_stroke_width(), stroke_opacity=[1, 0])
+    error_trails = [create_trail(p, w) for i in range(len(error_pulses)) for (p, w) in zip(error_pulses[i], weights[i * 2])]
+    for (pulse, trail) in zip(flat(error_pulses), error_trails):
+      self.add(pulse, trail)
+
+    self.play(AnimationGroup(*[p.animate.shift(e.get_center() - p.get_center()) for (p, e) in zip(flat(error_pulses), flat(errors))]))
+
+    update_error = lambda p, u, e: e.animate.set_fill_color(interpolate_color(BLACK, RED, calc_error(p, u)))
+    error_anims = [update_error(p, u, e) for (p, u, e) in zip(flat(predicted_nodes), flat(updated_nodes), flat(errors))]
+    self.play(AnimationGroup(*error_anims))
+
 
 T = TypeVar('T')
 def flat(arrays: list[list[T]]) -> list[T]:
@@ -96,6 +108,9 @@ def rand_gray(original: color.Color | None = None, range: float | None = None):
     return interpolate_color(BLACK, original, random.uniform(0, 1) * range)
 
   return interpolate_color(WHITE, original, random.uniform(0, 1) * range)
+
+def calc_error(predicted: Circle, actual: Circle) -> float:
+  return abs(gray_value(predicted.get_fill_color()) - gray_value(actual.get_fill_color()))
 
 def gray_value(color: color.Color) -> float:
   return color_to_rgb(color)[0]
