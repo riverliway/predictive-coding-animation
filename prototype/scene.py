@@ -6,11 +6,17 @@ class pnet(Scene):
   def construct(self):
     random.seed(8936)
 
-    _, predicted_nodes, all_errors = self.create_neurons()
-    weights = self.create_weights(predicted_nodes, all_errors)
+    neurons, predicted_nodes, errors = self.create_neurons()
+    weights = self.create_weights(predicted_nodes, errors)
     updated_nodes = self.override_label(predicted_nodes)
-    self.inference(predicted_nodes, updated_nodes, all_errors, weights)
 
+    random.seed(1255)
+    NUM_INFER_STEPS = 5
+    for i in range(NUM_INFER_STEPS):
+      speed = 1 - i * 0.1
+      self.inference(predicted_nodes, updated_nodes, errors, weights, speed)
+
+    self.update_weights(updated_nodes, errors, weights, neurons)
     self.wait()
 
   def create_neurons(self):
@@ -76,18 +82,19 @@ class pnet(Scene):
     self.play(AnimationGroup(*[n.animate.shift(LEFT * 1.5) for n in label_nodes]))
 
     # Replace with labels in nodes array for future use in error calculations
-    return predicted_nodes[0:-1] + [label_nodes]
+    new_nodes = [[n.copy() for n in layer] for layer in predicted_nodes[:-1]]
+    return new_nodes + [label_nodes]
 
-  def inference(self, predicted_nodes: list[list[Circle]], updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]]):
+  def inference(self, predicted_nodes: list[list[Circle]], updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]], anim_speed: float):
     # Move dots to triangles
-    self.inference_error(updated_nodes, errors, weights)
+    self.inference_error(updated_nodes, errors, weights, anim_speed)
 
     # Update triangle error colors
-    update_error_anim = lambda p, u, e: e.animate.set_fill_color(interpolate_color(BLACK, RED, calc_error(p, u)))
+    update_error_anim = lambda p, u, e: e.animate(run_time=anim_speed).set_fill_color(interpolate_color(BLACK, RED, calc_error(p, u)))
     self.play(AnimationGroup(*[update_error_anim(p, u, e) for (p, u, e) in zip(flat(predicted_nodes), flat(updated_nodes), flat(errors))]))
 
     # Move dots backwards from one triangle to another
-    self.inference_back(updated_nodes, errors, weights)
+    self.inference_back(updated_nodes, errors, weights, anim_speed)
 
     # Mutate triangle error colors after backwards pass
     animations = []
@@ -95,48 +102,45 @@ class pnet(Scene):
       # Randomly mutate the triangle error but limit it to the max error of the next layer
       max_error = max(map(lambda x: gray_value(x.get_fill_color()), errors[i + 1]))
       for error in errors[i]:
-        animations.append(error.animate.set_fill_color(interpolate_color(BLACK, RED, random.uniform(0, max_error))))
+        animations.append(error.animate(run_time=anim_speed).set_fill_color(interpolate_color(BLACK, RED, random.uniform(max_error * 0.6, max_error))))
 
     self.play(AnimationGroup(*animations))
 
     # Move the dots from the errors to the nodes for updating
-    self.inference_update(updated_nodes, errors, weights)
-
-    random.seed(66)
+    self.inference_update(updated_nodes, errors, weights, anim_speed)
 
     # Mutate inner neural activities after error update
-    new_updated_nodes = [[n.copy() for n in layer] for layer in updated_nodes]
     animations = []
-    for i in range(1, len(new_updated_nodes) - 1):
-      for (node, error_node) in zip(new_updated_nodes[i], errors[i]):
+    for i in range(1, len(updated_nodes) - 1):
+      for (node, error_node) in zip(updated_nodes[i], errors[i]):
         self.add(node)
         # Randomly mutate the updated node color but limit it to error of the node it is attached to
         error = gray_value(error_node.get_fill_color())
-        animations.append(node.animate.set_fill_color(rand_gray(node.get_fill_color(), error)))
+        animations.append(node.animate(run_time=anim_speed).set_fill_color(rand_gray(node.get_fill_color(), error)))
 
     self.play(AnimationGroup(*animations))
     
-  def inference_error(self, updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]]):
+  def inference_error(self, updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]], anim_speed: float):
     # Create the dots and trails representing the pulse to the error node
     error_pulses = [[Dot(n.get_center(), z_index=7, color=RED, fill_opacity=1) for n in layer] for layer in updated_nodes[1:]]
-    create_trail = lambda p, w: TracedPath(p.get_center, dissipating_time=0.5, z_index=6, stroke_color=RED, stroke_width=w.get_stroke_width(), stroke_opacity=[1, 0])
+    create_trail = lambda p, w: TracedPath(p.get_center, dissipating_time=0.5 * anim_speed, z_index=6, stroke_color=RED, stroke_width=w.get_stroke_width(), stroke_opacity=[1, 0])
     error_trails = [create_trail(p, w) for i in range(len(error_pulses)) for (p, w) in zip(error_pulses[i], weights[(i + 1) * 2])]
     for (pulse, trail) in zip(flat(error_pulses), error_trails):
       self.add(pulse, trail)
 
     # Pulse traveling within each neuron
-    self.play(AnimationGroup(*[p.animate.shift(e.get_center() - p.get_center()) for (p, e) in zip(flat(error_pulses), flat(errors[1:]))]))
+    self.play(AnimationGroup(*[p.animate(run_time=anim_speed).shift(e.get_center() - p.get_center()) for (p, e) in zip(flat(error_pulses), flat(errors[1:]))]))
 
-  def inference_back(self, updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]]):
+  def inference_back(self, updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]], anim_speed: float):
     # Create the dots and trails representing the pulse to the error node
     error_pulses = [[Dot(n.get_center(), z_index=7, color=RED, fill_opacity=1) for n in layer] for layer in errors[2:]]
-    create_trail = lambda p, w: TracedPath(p.get_center, dissipating_time=0.5, z_index=6, stroke_color=RED, stroke_width=w.get_stroke_width(), stroke_opacity=[0, 1])
+    create_trail = lambda p, w: TracedPath(p.get_center, dissipating_time=0.5 * anim_speed, z_index=6, stroke_color=RED, stroke_width=w.get_stroke_width(), stroke_opacity=[0, 1])
     error_trails = [create_trail(p, w) for i in range(len(error_pulses)) for (p, w) in zip(error_pulses[i], weights[(i + 2) * 2])]
     for (pulse, trail) in zip(flat(error_pulses), error_trails):
       self.add(pulse, trail)
 
     # Pulse traveling within each neuron backwards
-    self.play(AnimationGroup(*[p.animate(rate_func=rate_functions.rush_into).shift((e.get_center() - p.get_center()) * 0.7) for (p, e) in zip(flat(error_pulses), flat(updated_nodes[2:]))]))
+    self.play(AnimationGroup(*[p.animate(rate_func=rate_functions.rush_into, run_time=anim_speed).shift((e.get_center() - p.get_center()) * 0.7) for (p, e) in zip(flat(error_pulses), flat(updated_nodes[2:]))]))
 
     # Create the dots and trails representing the pulse backwards between errors nodes
     animations = []
@@ -147,20 +151,47 @@ class pnet(Scene):
         sk_op = lambda: [0, 1] if (w.get_start() - w.get_end())[0] < (w.get_start() - w.get_end())[1] else [1, 0]
         trail = TracedPath(pulse.get_center, dissipating_time=0.5, z_index=6, stroke_color=RED, stroke_width=w.get_stroke_width(), stroke_opacity=sk_op())
         self.add(trail)
-        animations.append(pulse.animate(rate_func=rate_functions.rush_from).shift(w.get_start() - w.get_end()))
+        animations.append(pulse.animate(rate_func=rate_functions.rush_from, run_time=anim_speed).shift(w.get_start() - w.get_end()))
 
     self.play(AnimationGroup(*animations))
 
-  def inference_update(self, updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]]):
+  def inference_update(self, updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]], anim_speed: float):
     # Create the dots and trails representing the pulse from the error to the node
     error_pulses = [[Dot(n.get_center(), z_index=7, color=RED, fill_opacity=1) for n in layer] for layer in errors[1:-1]]
-    create_trail = lambda p, w: TracedPath(p.get_center, dissipating_time=0.5, z_index=6, stroke_color=RED, stroke_width=w.get_stroke_width(), stroke_opacity=[0, 1])
+    create_trail = lambda p, w: TracedPath(p.get_center, dissipating_time=0.5 * anim_speed, z_index=6, stroke_color=RED, stroke_width=w.get_stroke_width(), stroke_opacity=[0, 1])
     error_trails = [create_trail(p, w) for i in range(len(error_pulses)) for (p, w) in zip(error_pulses[i], weights[(i + 1) * 2])]
     for (pulse, trail) in zip(flat(error_pulses), error_trails):
       self.add(pulse, trail)
 
     # Pulse traveling within each neuron
-    self.play(AnimationGroup(*[p.animate.shift(e.get_center() - p.get_center()) for (p, e) in zip(flat(error_pulses), flat(updated_nodes[1:-1]))]))
+    self.play(AnimationGroup(*[p.animate(run_time=anim_speed).shift(e.get_center() - p.get_center()) for (p, e) in zip(flat(error_pulses), flat(updated_nodes[1:-1]))]))
+
+  def update_weights(self, updated_nodes: list[list[Circle]], errors: list[list[Triangle]], weights: list[list[Line]], neurons: list[list[Circle]]):
+    # Iterate over each layer, resetting the nodes, errors, and weights
+    anims = []
+    for i in range(len(updated_nodes)):
+      # Reset the node to base color
+      anims.append([node.animate.set_fill_color(neuron.get_fill_color()) for (node, neuron) in zip(updated_nodes[i], neurons[i])])
+
+      # Mutate the weights between the node and the error
+      anims.append([w.animate.set_opacity(0.25) for w in weights[i * 2]])
+
+      # Reset the error to base color
+      anims.append([error.animate.set_fill_color(neuron.get_fill_color()) for (error, neuron) in zip(errors[i], neurons[i])])
+
+      # Mutate the weights between the error and every next node
+      if i != len(updated_nodes) - 1:
+        # There are no weights after the last layer
+        anims.append([w.animate.set_opacity(0.25) for w in weights[i * 2 + 1]])
+
+    self.play(AnimationGroup(*flat(anims)))
+
+    # Mutate the weights
+    anims = []
+    for weight_layer in weights:
+      anims.append([w.animate.set_stroke_width(random.uniform(1, 10)).set_opacity(1) for w in weight_layer])
+
+    self.play(AnimationGroup(*flat(anims), lag_ratio=0.03))
 
 T = TypeVar('T')
 def flat(arrays: list[list[T]]) -> list[T]:
@@ -178,9 +209,9 @@ def rand_gray(original: color.Color | None = None, range: float | None = None):
 
   direction = random.randint(0, 1)
   if direction == 0:
-    return interpolate_color(original, BLACK, random.uniform(0, 1) * range)
+    return interpolate_color(original, BLACK, random.uniform(range * 0.6, range))
 
-  return interpolate_color(original, WHITE, random.uniform(0, 1) * range)
+  return interpolate_color(original, WHITE, random.uniform(range * 0.6, range))
 
 def calc_error(predicted: Circle, actual: Circle) -> float:
   return abs(gray_value(predicted.get_fill_color()) - gray_value(actual.get_fill_color()))
