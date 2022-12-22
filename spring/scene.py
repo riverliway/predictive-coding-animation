@@ -7,6 +7,7 @@ class spring(Scene):
 
     neuron_locations = self.construct_baseplates()
     self.create_neurons(neuron_locations)
+    self.create_pins(neuron_locations)
     
     self.wait()
 
@@ -36,7 +37,7 @@ class spring(Scene):
     return [s.get_center() + UP * 1.5 for s in [scale1, scale2, scale3, scale4]]
 
   def create_neurons(self, neuron_locations: list[np.ndarray]): 
-    neuron = Circle(radius=0.5, color=WHITE).set_opacity(1)
+    neuron = Circle(radius=0.5, color=WHITE, z_index=20).set_opacity(1)
     neuron0 = neuron.copy().shift(neuron_locations[0])
     neuron1 = neuron.copy().shift(neuron_locations[1])
     neuron2 = neuron.copy().shift(neuron_locations[2])
@@ -45,13 +46,22 @@ class spring(Scene):
 
     self.play(AnimationGroup(*[Create(n) for n in neurons], lag_ratio=0.1))
 
-    weight0 = Arrow(neuron0, neuron1, buff=0, color=YELLOW)
-    weight1 = Arrow(neuron1, neuron2, buff=0, color=YELLOW)
-    weight2 = Arrow(neuron1, neuron3, buff=0, color=YELLOW)
+    weight0 = Line(start=neuron0.get_center(), end=neuron1.get_center(), color=YELLOW)
+    weight1 = Line(start=neuron1.get_center(), end=neuron2.get_center(), color=YELLOW)
+    weight2 = Line(start=neuron1.get_center(), end=neuron3.get_center(), color=YELLOW)
 
-    self.play(AnimationGroup(Create(weight0), Create(VGroup(weight1, weight2)), lag_ratio=0.1))
+    self.play(AnimationGroup(Create(weight0), Create(VGroup(weight1, weight2), lag_ratio=0), lag_ratio=0.3))
 
-    self.play(neuron1.animate.shift(DOWN))
+    # self.play(neuron1.animate.shift(DOWN), rate_func=rate_functions.ease_out_elastic, run_time=2)
+
+  def create_pins(self, neuron_locations: list[np.ndarray]):
+    pin = SVGMobject('./pin.svg', height=0.6, width=0.6, z_index=25, stroke_color=BLACK).apply_matrix([[-1, 0], [0, 1]])
+    pin0 = pin.copy().shift(neuron_locations[0] + 2 * DOWN)
+    pin1 = pin.copy().shift(neuron_locations[3])
+    self.play(Create(pin0))
+    pin0.set_z_index(26)
+    self.play(Create(pin1))
+    pin1.set_z_index(26)
 
 def neuron_color(activity: float) -> color.Color:
   return interpolate_color(BLUE_E, WHITE, activity)
