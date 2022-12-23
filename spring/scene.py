@@ -1,17 +1,19 @@
 from typing import TypeVar
 from manim import *
 import numpy as np
+import math
 
 POLE_COLOR = '#606060'
 INACTIVE_COLOR = '#1e3b69'
 
 class spring(Scene):
   def construct(self):
-
     neuron_locations = self.construct_baseplates()
     neurons, weights = self.create_neurons(neuron_locations)
     ghost, spring = self.add_error(neurons[2])
     self.create_pins([n.get_center() for n in neurons])
+
+    self.inference(neurons, ghost, weights, spring)
     
     self.wait()
 
@@ -63,8 +65,6 @@ class spring(Scene):
 
     return neurons, [weight0, weight1, weight2]
 
-    # self.play(neuron1.animate.shift(DOWN), rate_func=rate_functions.ease_out_elastic, run_time=2)
-
   def add_error(self, neuron: Circle) -> tuple[Circle, FunctionGraph]:
     """
     Adds the error by stretching the neuron to reveal the ghost
@@ -102,3 +102,29 @@ class spring(Scene):
     pin2.set_z_index(26)
 
     self.play(AnimationGroup(c0, c1, c2))
+
+  def inference(self, neurons: list[Circle], ghost1: Circle, weights: list[Line], spring: FunctionGraph):
+    # Since Manim doesn't allow for rate functions to go outside of [0, 1]
+    # We need to have the spring rate function terminate not at 1
+    # and subsequently extend all animations so they end at the right distance
+    # The 1.19 value was found by brute force
+    extender = 1.19
+    ghost0 = neurons[1].copy().set_opacity(0.5)
+    ghost2 = neurons[3].copy().set_opacity(0.5)
+    self.add(ghost0)
+    self.add(ghost2)
+
+    leftNeuronMove = DOWN * 1.5
+    leftNeuronAnim = neurons[1].animate.shift(leftNeuronMove * extender)
+
+    self.play(AnimationGroup(leftNeuronAnim, rate_func=spring_interp), run_time=2)
+
+    neurons[1].shift(leftNeuronMove * (1 - extender))
+    self.add(neurons[1])
+
+def spring_interp (x: float) -> float:
+  """
+  Interpolates a spring animation
+  """
+  nx = x - 0.06
+  return (pow(2, -10 * nx) * math.sin(30 * nx) + 1.476) * 0.45
