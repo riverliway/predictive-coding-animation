@@ -13,6 +13,8 @@ class spring(Scene):
     ghost, spring = self.add_error(neurons[2])
     self.create_pins([n.get_center() for n in neurons])
 
+    self.wait()
+
     self.inference(neurons, ghost, weights, spring)
     
     self.wait()
@@ -114,13 +116,57 @@ class spring(Scene):
     self.add(ghost0)
     self.add(ghost2)
 
-    leftNeuronMove = DOWN * 1.5
-    leftNeuronAnim = neurons[1].animate.shift(leftNeuronMove * extender)
+    displacement = DOWN * 1.5
+    targetColor = interpolate_color(WHITE, INACTIVE_COLOR, 0.5 * extender)
+    leftNeuronAnim = neurons[1].animate.set(fill_color=targetColor).shift(displacement * extender)
 
-    self.play(AnimationGroup(leftNeuronAnim, rate_func=spring_interp), run_time=2)
+    spring0 = FunctionGraph(lambda t: np.sin(t), color=RED, x_range=[0, 10 * PI], stroke_width=5)
+    spring0.rotate(90 * DEGREES).scale(0.1).move_to(ghost0.get_center()).stretch(0.1, 1).shift(DOWN * 0.1)
+    stretchAnim0 = spring0.animate.stretch(5 * extender, 1).shift(0.75 * DOWN * extender)
 
-    neurons[1].shift(leftNeuronMove * (1 - extender))
+    spring1 = FunctionGraph(lambda t: np.sin(t), color=RED, x_range=[0, 10 * PI], stroke_width=5)
+    spring1.rotate(90 * DEGREES).scale(0.1).move_to(ghost2.get_center()).stretch(0.1, 1).shift(UP * 0.1)
+    stretchAnim1 = spring1.animate.stretch(5 * extender, 1).shift(0.75 * DOWN * extender)
+
+    stretchAnim2 = spring.animate.stretch(0.45, 1).shift(DOWN * 0.75 * extender)
+
+    topWeightAnim = weights[1].animate.shift(displacement * extender)
+    bottomWeightAnim = weights[2].animate.shift(displacement * extender)
+
+    topGhostAnim = ghost1.animate.set(fill_color=targetColor).shift(displacement * extender)
+    bottomGhostAnim = ghost2.animate.set(fill_color=targetColor).shift(displacement * extender)
+
+    allAnims = [leftNeuronAnim, topWeightAnim, bottomWeightAnim, topGhostAnim, bottomGhostAnim, stretchAnim0, stretchAnim1, stretchAnim2]
+
+    self.play(AnimationGroup(*allAnims, rate_func=spring_interp), run_time=2)
+
+    neurons[1].shift(displacement * (1 - extender))
+    mid_color = interpolate_color(WHITE, INACTIVE_COLOR, 0.5)
+    neurons[1].set(fill_color=mid_color)
     self.add(neurons[1])
+
+    spring0.stretch(0.86, 1).shift(0.75 * DOWN * (1 - extender))
+    self.add(spring0)
+
+    spring1.stretch(0.86, 1).shift(0.75 * DOWN * (1 - extender))
+    self.add(spring1)
+
+    spring.stretch(1.2, 1).shift(0.75 * DOWN * (1 - extender))
+    self.add(spring)
+
+    weights[1].shift(displacement * (1 - extender))
+    self.add(weights[1])
+
+    weights[2].shift(displacement * (1 - extender))
+    self.add(weights[2])
+
+    ghost1.shift(displacement * (1 - extender))
+    ghost1.set(fill_color=mid_color)
+    self.add(ghost1)
+
+    ghost2.shift(displacement * (1 - extender))
+    ghost2.set(fill_color=mid_color)
+    self.add(ghost2)
 
 def spring_interp (x: float) -> float:
   """
