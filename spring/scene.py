@@ -140,6 +140,11 @@ class spring(Scene):
 
     self.play(AnimationGroup(*allAnims, rate_func=spring_interp), run_time=2)
 
+    # There is a really stupid consequence of using a rate function that doesn't end at 1
+    # which is that it will jerk all of the elements to the positions
+    # so we have to go through an add all of the elements that were updated
+    # and eyeball where they should go
+
     neurons[1].shift(displacement * (1 - extender))
     mid_color = interpolate_color(WHITE, INACTIVE_COLOR, 0.5)
     neurons[1].set(fill_color=mid_color)
