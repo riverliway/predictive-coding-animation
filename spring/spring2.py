@@ -2,13 +2,83 @@
 The third prototype
 """
 
-from typing import TypeVar
+from typing import Literal
 from manim import *
 import numpy as np
 import math
 
 POLE_COLOR = '#606060'
 INACTIVE_COLOR = '#1e3b69'
+
+def spring_interp (x: float) -> float:
+  """
+  Interpolates a spring animation
+  """
+  nx = x - 0.16
+  return (pow(2, -10 * nx) * math.sin(50 * nx) + 1.476) * 0.335 + 0.50645
+
+
+class SpringMaob:
+  def __init__(self, position: np.ndarray, height: float, width = 1):
+    """
+    Creates a spring that has its top fixes to a certain position 
+    and the height can be set accordingly
+    """
+    self.__position: np.ndarray = position
+    self.__height = 1
+    self.__pin = 'top'
+
+    self.spring = FunctionGraph(lambda t: np.sin(t), color=RED, x_range=[0, 10 * PI], stroke_width=5)
+    self.spring.rotate(90 * DEGREES)
+    self.spring.stretch(1 / (10 * PI), 1)
+    self.spring.stretch(0.5 * width, 0)
+    self.spring.move_to(position)
+    self.spring.shift(DOWN * 0.5)
+
+    self.set_height(height)
+
+  def set_height(self, height: float) -> None:
+    """
+    Sets the spring to the desired height while keeping the pinned end stationary.
+    """
+    self.__move(height, self.spring)
+
+  def animate(self, height: float, run_time = 1, rate_func = spring_interp):
+    """
+    Animates the spring moving to the desired height while keeping the pinned end stationary.
+    """
+    return self.__move(height, self.spring.animate(rate_func=rate_func, run_time=run_time))
+
+  def get_spring(self) -> FunctionGraph:
+    """
+    Gets the manim object under the hood.
+    """
+    return self.spring
+
+  def set_pin(self, pin: Literal['top', 'bot']) -> None:
+    """
+    The pinned end of the spring does not move during animations/setting of height.
+    The non-pinned end is allowed to move freely.
+    """
+    self.__pin = pin
+
+  def __move(self, height, obj):
+    """
+    Internal function that abstracts the logic for both `set_height` and `animate`.
+    Keeps the pinned location in place while extending the non-pinned location to the appropriate height.
+    """
+    if (height == self.__height):
+      return None
+
+    ratio = height / self.__height
+    center = self.__position + DOWN * self.__height / 2
+    direction = UP if self.__pin == 'top' else DOWN
+    pinned_pos = height / 2 * direction + center
+    target_pos = self.__position if self.__pin == 'top' else self.__position + DOWN * self.__height
+
+    self.__height = height
+    return obj.stretch(ratio, 1).shift(target_pos - pinned_pos)
+
 
 class spring(Scene):
   def construct(self):
@@ -71,7 +141,7 @@ class spring(Scene):
 
     return neurons, [weight0, weight1, weight2]
 
-  def add_error(self, neuron: Circle) -> tuple[Circle, FunctionGraph]:
+  def add_error(self, neuron: Circle) -> tuple[Circle, SpringMaob]:
     """
     Adds the error by stretching the neuron to reveal the ghost
 
@@ -80,9 +150,8 @@ class spring(Scene):
     ghost = neuron.copy().set_opacity(0.5)
     self.add(ghost)
 
-    spring = FunctionGraph(lambda t: np.sin(t), color=RED, x_range=[0, 10 * PI], stroke_width=5)
-    spring.rotate(90 * DEGREES).scale(0.1).move_to(ghost.get_center()).stretch(0.1, 1).shift(DOWN * 0.1)
-    stretchAnim = spring.animate.stretch(10, 1).shift(1.5 * DOWN)
+    spring = SpringMaob(ghost.get_center(), 0.1, width=0.2)
+    stretchAnim = spring.animate(3, rate_func=rate_functions.smooth)
     neuronAnim = neuron.animate().set_fill_color(INACTIVE_COLOR).shift(DOWN * 3)
     self.play(AnimationGroup(stretchAnim, neuronAnim))
 
@@ -109,7 +178,7 @@ class spring(Scene):
 
     self.play(AnimationGroup(c0, c1, c2))
 
-  def inference(self, neurons: list[Circle], ghost1: Circle, weights: list[Line], spring: FunctionGraph):
+  def inference(self, neurons: list[Circle], ghost1: Circle, weights: list[Line], spring: SpringMaob):
     ghost0 = neurons[1].copy().set_opacity(0.5)
     ghost2 = neurons[3].copy().set_opacity(0.5)
     self.add(ghost0)
@@ -119,15 +188,15 @@ class spring(Scene):
     targetColor = interpolate_color(WHITE, INACTIVE_COLOR, 0.5)
     leftNeuronAnim = neurons[1].animate(rate_func=spring_interp).set(fill_color=targetColor).shift(displacement)
 
-    spring0 = FunctionGraph(lambda t: np.sin(t), color=RED, x_range=[0, 10 * PI], stroke_width=5)
-    spring0.rotate(90 * DEGREES).scale(0.1).move_to(ghost0.get_center()).stretch(0.1, 1).shift(DOWN * 0.1)
-    stretchAnim0 = spring0.animate(rate_func=spring_interp).stretch(5, 1).shift(0.75 * DOWN)
+    spring0 = SpringMaob(ghost0.get_center(), 0.1, width=0.2)
+    stretchAnim0 = spring0.animate(1.5)
 
-    spring1 = FunctionGraph(lambda t: np.sin(t), color=RED, x_range=[0, 10 * PI], stroke_width=5)
-    spring1.rotate(90 * DEGREES).scale(0.1).move_to(ghost2.get_center()).stretch(0.1, 1).shift(UP * 0.1)
-    stretchAnim1 = spring1.animate(rate_func=spring_interp).stretch(5, 1).shift(0.75 * DOWN)
+    spring1 = SpringMaob(ghost2.get_center(), 0.1, width=0.2)
+    stretchAnim1 = spring1.animate(1.5)
 
-    stretchAnim2 = spring.animate(rate_func=spring_interp).stretch(0.45, 1).shift(DOWN * 0.75)
+    # Set this spring animation to be pinned at the bottom
+    spring.set_pin('bot')
+    stretchAnim2 = spring.animate(1.5)
 
     topWeightAnim = weights[1].animate(rate_func=spring_interp).shift(displacement)
     bottomWeightAnim = weights[2].animate(rate_func=spring_interp).shift(displacement)
@@ -138,11 +207,3 @@ class spring(Scene):
     allAnims = [leftNeuronAnim, topWeightAnim, bottomWeightAnim, topGhostAnim, bottomGhostAnim, stretchAnim0, stretchAnim1, stretchAnim2]
 
     self.play(AnimationGroup(*allAnims), run_time=4)
-
-def spring_interp (x: float) -> float:
-  """
-  Interpolates a spring animation
-  """
-  return rate_functions.ease_out_elastic(x)
-  nx = x - 0.06
-  return (pow(2, -10 * nx) * math.sin(30 * nx) + 1.476) * 0.45
