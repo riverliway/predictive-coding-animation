@@ -68,7 +68,7 @@ class SpringMaob:
     Keeps the pinned location in place while extending the non-pinned location to the appropriate height.
     """
     if (height == self.__height):
-      return None
+      return obj
 
     ratio = height / self.__height
     center = self.__position + DOWN * self.__height / 2
@@ -87,13 +87,15 @@ class spring(Scene):
     self.train(3, neuron_locations)
 
   def train(self, step: int, neuron_locs: list[np.ndarray]):
-    movement = 0.25
+    movement = 3 / 12
     neuron_locations = [loc for loc in neuron_locs]
-    neuron_locations[1] += step * DOWN * movement
-    neuron_locations[2] += step * DOWN * movement * 2
+    first_offset = step * movement
+    second_offset = step * movement * 2
+    neuron_locations[1] += first_offset * DOWN
+    neuron_locations[2] += second_offset * DOWN
 
     self.change_label('Prediction')
-    neurons, weights = self.create_neurons(neuron_locations)
+    neurons, weights = self.create_neurons(neuron_locations, [0, first_offset / 3, second_offset / 3, 0])
 
     self.change_label('Calculate Error')
     ghost, spring = self.add_error(neurons[2], step * movement * 2)
@@ -141,17 +143,18 @@ class spring(Scene):
 
     return [s.get_center() + UP * 1.5 for s in [scale1, scale2, scale3, scale4]]
 
-  def create_neurons(self, neuron_locations: list[np.ndarray]) -> tuple[list[Circle], list[Line]]:
+  def create_neurons(self, neuron_locations: list[np.ndarray], activations: list[float]) -> tuple[list[Circle], list[Line]]:
     """
-    Creates the neurons and weights on the top of their posts
+    Creates the neurons and weights on the top of their posts.
+    The activations is for settings a color
 
     Returns: all of the neurons and all of the weights
     """
     neuron = Circle(radius=0.5, color=WHITE, z_index=20).set_opacity(1)
-    neuron0 = neuron.copy().shift(neuron_locations[0])
-    neuron1 = neuron.copy().shift(neuron_locations[1])
-    neuron2 = neuron.copy().shift(neuron_locations[2])
-    neuron3 = neuron.copy().shift(neuron_locations[3])
+    neuron0 = neuron.copy().shift(neuron_locations[0]).set_color(interpolate_color(WHITE, INACTIVE_COLOR, activations[0]))
+    neuron1 = neuron.copy().shift(neuron_locations[1]).set_color(interpolate_color(WHITE, INACTIVE_COLOR, activations[1]))
+    neuron2 = neuron.copy().shift(neuron_locations[2]).set_color(interpolate_color(WHITE, INACTIVE_COLOR, activations[2]))
+    neuron3 = neuron.copy().shift(neuron_locations[3]).set_color(interpolate_color(WHITE, INACTIVE_COLOR, activations[3]))
     neurons = [neuron0, neuron1, neuron2, neuron3]
 
     self.play(AnimationGroup(*[Create(n) for n in neurons], lag_ratio=0.1))
@@ -174,7 +177,7 @@ class spring(Scene):
     ghost = neuron.copy().set_opacity(0.5)
     self.add(ghost)
 
-    height = 3
+    height = 3 - offset
     spring = SpringMaob(ghost.get_center(), 0.1, width=0.2)
     stretchAnim = spring.animate(height, rate_func=rate_functions.smooth)
     neuronAnim = neuron.animate().set_fill_color(INACTIVE_COLOR).shift(DOWN * height)
