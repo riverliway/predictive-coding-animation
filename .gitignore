@@ -129,5 +129,4 @@ dmypy.json
 .pyre/
 
 .DS_Store
-*.mp4
-partial_movie_file_list.txt
+media

@@ -83,15 +83,38 @@ class SpringMaob:
 class spring(Scene):
   def construct(self):
     neuron_locations = self.construct_baseplates()
+    self.label = None
+    self.train(3, neuron_locations)
+
+  def train(self, step: int, neuron_locs: list[np.ndarray]):
+    movement = 0.25
+    neuron_locations = [loc for loc in neuron_locs]
+    neuron_locations[1] += step * DOWN * movement
+    neuron_locations[2] += step * DOWN * movement * 2
+
+    self.change_label('Prediction')
     neurons, weights = self.create_neurons(neuron_locations)
-    ghost, spring = self.add_error(neurons[2])
-    self.create_pins([n.get_center() for n in neurons])
+
+    self.change_label('Calculate Error')
+    ghost, spring = self.add_error(neurons[2], step * movement * 2)
 
     self.wait()
 
+    self.create_pins([n.get_center() for n in neurons])
+
+    self.change_label('Inference')
+    self.wait()
     self.inference(neurons, ghost, weights, spring)
     
     self.wait()
+
+  def change_label(self, new):
+    if (self.label is not None):
+      self.play(FadeOut(self.label))
+
+    self.label = Paragraph(new, alignment='left').shift(LEFT * 6.5 + UP * 3)
+    self.label.shift(self.label.get_center() - self.label.get_left())
+    self.play(Write(self.label))
 
   def construct_baseplates(self) -> list[np.ndarray]:
     """
@@ -141,18 +164,20 @@ class spring(Scene):
 
     return neurons, [weight0, weight1, weight2]
 
-  def add_error(self, neuron: Circle) -> tuple[Circle, SpringMaob]:
+  def add_error(self, neuron: Circle, offset: float) -> tuple[Circle, SpringMaob]:
     """
-    Adds the error by stretching the neuron to reveal the ghost
+    Adds the error by stretching the neuron to reveal the ghost.
+    The height refers to how far down we are on the current training index
 
     Returns: the ghost neuron and the error spring
     """
     ghost = neuron.copy().set_opacity(0.5)
     self.add(ghost)
 
+    height = 3
     spring = SpringMaob(ghost.get_center(), 0.1, width=0.2)
-    stretchAnim = spring.animate(3, rate_func=rate_functions.smooth)
-    neuronAnim = neuron.animate().set_fill_color(INACTIVE_COLOR).shift(DOWN * 3)
+    stretchAnim = spring.animate(height, rate_func=rate_functions.smooth)
+    neuronAnim = neuron.animate().set_fill_color(INACTIVE_COLOR).shift(DOWN * height)
     self.play(AnimationGroup(stretchAnim, neuronAnim))
 
     return ghost, spring
