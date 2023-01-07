@@ -1,3 +1,7 @@
+"""
+The third prototype
+"""
+
 from typing import TypeVar
 from manim import *
 import numpy as np
