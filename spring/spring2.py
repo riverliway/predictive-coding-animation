@@ -8,6 +8,7 @@ import numpy as np
 import math
 
 POLE_COLOR = '#606060'
+POLE_HEIGHT = 3
 INACTIVE_COLOR = '#1e3b69'
 
 def spring_interp (x: float) -> float:
@@ -87,7 +88,7 @@ class spring(Scene):
     self.train(3, neuron_locations)
 
   def train(self, step: int, neuron_locs: list[np.ndarray]):
-    movement = 3 / 12
+    movement = POLE_HEIGHT / 12
     neuron_locations = [loc for loc in neuron_locs]
     first_offset = step * movement
     second_offset = step * movement * 2
@@ -95,7 +96,7 @@ class spring(Scene):
     neuron_locations[2] += second_offset * DOWN
 
     self.change_label('Prediction')
-    neurons, weights = self.create_neurons(neuron_locations, [0, first_offset / 3, second_offset / 3, 0])
+    neurons, weights = self.create_neurons(neuron_locations, [0, first_offset / POLE_HEIGHT, second_offset / POLE_HEIGHT, 0])
 
     self.change_label('Calculate Error')
     ghost, spring = self.add_error(neurons[2], step * movement * 2)
@@ -129,19 +130,19 @@ class spring(Scene):
     rect3 = base.copy().shift(1.3 * DOWN, 3 * RIGHT)
     self.add(rect1, rect2, rect3)
 
-    pole = Rectangle(color=POLE_COLOR, width=0.2, height=3).set_opacity(1).shift(rect1.get_center()).shift(UP * 1.5)
+    pole = Rectangle(color=POLE_COLOR, width=0.2, height=POLE_HEIGHT).set_opacity(1).shift(rect1.get_center()).shift(UP * POLE_HEIGHT / 2)
     dLine1 = DashedLine(rect1.get_center() + 0.5 * LEFT, rect1.get_center() + 0.5 * RIGHT).set_color(POLE_COLOR)
-    dLine2 = dLine1.copy().shift(UP * 1.5)
-    dLine3 = dLine2.copy().shift(UP * 1.5)
+    dLine2 = dLine1.copy().shift(UP * POLE_HEIGHT / 2)
+    dLine3 = dLine2.copy().shift(UP * POLE_HEIGHT / 2)
 
     scale1 = VGroup(pole, dLine1, dLine2, dLine3)
     scale2 = scale1.copy().shift(RIGHT * 2)
-    scale3 = scale2.copy().shift(RIGHT * 4.75 + 1.5 * UP)
-    scale4 = scale2.copy().shift(RIGHT * 3.25 + 1.5 * DOWN)
+    scale3 = scale2.copy().shift(RIGHT * 4.75 + POLE_HEIGHT / 2 * UP)
+    scale4 = scale2.copy().shift(RIGHT * 3.25 + POLE_HEIGHT / 2 * DOWN)
 
     self.add(scale1, scale2, scale3, scale4)
 
-    return [s.get_center() + UP * 1.5 for s in [scale1, scale2, scale3, scale4]]
+    return [s.get_center() + UP * POLE_HEIGHT / 2 for s in [scale1, scale2, scale3, scale4]]
 
   def create_neurons(self, neuron_locations: list[np.ndarray], activations: list[float]) -> tuple[list[Circle], list[Line]]:
     """
@@ -177,7 +178,7 @@ class spring(Scene):
     ghost = neuron.copy().set_opacity(0.5)
     self.add(ghost)
 
-    height = 3 - offset
+    height = POLE_HEIGHT - offset
     spring = SpringMaob(ghost.get_center(), 0.1, width=0.2)
     stretchAnim = spring.animate(height, rate_func=rate_functions.smooth)
     neuronAnim = neuron.animate().set_fill_color(INACTIVE_COLOR).shift(DOWN * height)
