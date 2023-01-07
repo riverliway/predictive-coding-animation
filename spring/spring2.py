@@ -110,76 +110,39 @@ class spring(Scene):
     self.play(AnimationGroup(c0, c1, c2))
 
   def inference(self, neurons: list[Circle], ghost1: Circle, weights: list[Line], spring: FunctionGraph):
-    # Since Manim doesn't allow for rate functions to go outside of [0, 1]
-    # We need to have the spring rate function terminate not at 1
-    # and subsequently extend all animations so they end at the right distance
-    # The 1.19 value was found by brute force
-    extender = 1.19
     ghost0 = neurons[1].copy().set_opacity(0.5)
     ghost2 = neurons[3].copy().set_opacity(0.5)
     self.add(ghost0)
     self.add(ghost2)
 
     displacement = DOWN * 1.5
-    targetColor = interpolate_color(WHITE, INACTIVE_COLOR, 0.5 * extender)
-    leftNeuronAnim = neurons[1].animate.set(fill_color=targetColor).shift(displacement * extender)
+    targetColor = interpolate_color(WHITE, INACTIVE_COLOR, 0.5)
+    leftNeuronAnim = neurons[1].animate(rate_func=spring_interp).set(fill_color=targetColor).shift(displacement)
 
     spring0 = FunctionGraph(lambda t: np.sin(t), color=RED, x_range=[0, 10 * PI], stroke_width=5)
     spring0.rotate(90 * DEGREES).scale(0.1).move_to(ghost0.get_center()).stretch(0.1, 1).shift(DOWN * 0.1)
-    stretchAnim0 = spring0.animate.stretch(5 * extender, 1).shift(0.75 * DOWN * extender)
+    stretchAnim0 = spring0.animate(rate_func=spring_interp).stretch(5, 1).shift(0.75 * DOWN)
 
     spring1 = FunctionGraph(lambda t: np.sin(t), color=RED, x_range=[0, 10 * PI], stroke_width=5)
     spring1.rotate(90 * DEGREES).scale(0.1).move_to(ghost2.get_center()).stretch(0.1, 1).shift(UP * 0.1)
-    stretchAnim1 = spring1.animate.stretch(5 * extender, 1).shift(0.75 * DOWN * extender)
+    stretchAnim1 = spring1.animate(rate_func=spring_interp).stretch(5, 1).shift(0.75 * DOWN)
 
-    stretchAnim2 = spring.animate.stretch(0.45, 1).shift(DOWN * 0.75 * extender)
+    stretchAnim2 = spring.animate(rate_func=spring_interp).stretch(0.45, 1).shift(DOWN * 0.75)
 
-    topWeightAnim = weights[1].animate.shift(displacement * extender)
-    bottomWeightAnim = weights[2].animate.shift(displacement * extender)
+    topWeightAnim = weights[1].animate(rate_func=spring_interp).shift(displacement)
+    bottomWeightAnim = weights[2].animate(rate_func=spring_interp).shift(displacement)
 
-    topGhostAnim = ghost1.animate.set(fill_color=targetColor).shift(displacement * extender)
-    bottomGhostAnim = ghost2.animate.set(fill_color=targetColor).shift(displacement * extender)
+    topGhostAnim = ghost1.animate(rate_func=spring_interp).set(fill_color=targetColor).shift(displacement)
+    bottomGhostAnim = ghost2.animate(rate_func=spring_interp).set(fill_color=targetColor).shift(displacement)
 
     allAnims = [leftNeuronAnim, topWeightAnim, bottomWeightAnim, topGhostAnim, bottomGhostAnim, stretchAnim0, stretchAnim1, stretchAnim2]
 
-    self.play(AnimationGroup(*allAnims, rate_func=spring_interp), run_time=2)
-
-    # There is a really stupid consequence of using a rate function that doesn't end at 1
-    # which is that it will jerk all of the elements to the positions
-    # so we have to go through an add all of the elements that were updated
-    # and eyeball where they should go
-
-    neurons[1].shift(displacement * (1 - extender))
-    mid_color = interpolate_color(WHITE, INACTIVE_COLOR, 0.5)
-    neurons[1].set(fill_color=mid_color)
-    self.add(neurons[1])
-
-    spring0.stretch(0.86, 1).shift(0.75 * DOWN * (1 - extender))
-    self.add(spring0)
-
-    spring1.stretch(0.86, 1).shift(0.75 * DOWN * (1 - extender))
-    self.add(spring1)
-
-    spring.stretch(1.2, 1).shift(0.75 * DOWN * (1 - extender))
-    self.add(spring)
-
-    weights[1].shift(displacement * (1 - extender))
-    self.add(weights[1])
-
-    weights[2].shift(displacement * (1 - extender))
-    self.add(weights[2])
-
-    ghost1.shift(displacement * (1 - extender))
-    ghost1.set(fill_color=mid_color)
-    self.add(ghost1)
-
-    ghost2.shift(displacement * (1 - extender))
-    ghost2.set(fill_color=mid_color)
-    self.add(ghost2)
+    self.play(AnimationGroup(*allAnims), run_time=4)
 
 def spring_interp (x: float) -> float:
   """
   Interpolates a spring animation
   """
+  return rate_functions.ease_out_elastic(x)
   nx = x - 0.06
   return (pow(2, -10 * nx) * math.sin(30 * nx) + 1.476) * 0.45
