@@ -56,6 +56,9 @@ class SpringMaob:
     """
     return self.spring
 
+  def get_height(self) -> float:
+    return self.__height
+
   def set_pin(self, pin: Literal['top', 'bot']) -> None:
     """
     The pinned end of the spring does not move during animations/setting of height.
@@ -85,7 +88,7 @@ class spring(Scene):
   def construct(self):
     neuron_locations = self.construct_baseplates()
     self.label = None
-    self.train(3, neuron_locations)
+    self.train(0, neuron_locations)
 
   def train(self, step: int, neuron_locs: list[np.ndarray]):
     movement = POLE_HEIGHT / 12
@@ -103,13 +106,22 @@ class spring(Scene):
 
     self.wait()
 
-    self.create_pins([n.get_center() for n in neurons])
+    pins = self.create_pins([n.get_center() for n in neurons])
 
     self.change_label('Inference')
     self.wait()
-    self.inference(neurons, ghost, weights, spring)
+    ghost_neurons, springs = self.inference(neurons, ghost, weights, spring, first_offset)
     
     self.wait()
+
+    self.change_label('Update Weights')
+    self.update_weights(weights, movement, ghost_neurons, springs)
+
+    # Fade out unnecessary things
+    self.change_label('Updated Prediction')
+    pins_fade = [FadeOut(p) for p in pins[1:]]
+
+    self.play(AnimationGroup(*pins_fade))
 
   def change_label(self, new):
     if (self.label is not None):
@@ -152,10 +164,10 @@ class spring(Scene):
     Returns: all of the neurons and all of the weights
     """
     neuron = Circle(radius=0.5, color=WHITE, z_index=20).set_opacity(1)
-    neuron0 = neuron.copy().shift(neuron_locations[0]).set_color(interpolate_color(WHITE, INACTIVE_COLOR, activations[0]))
-    neuron1 = neuron.copy().shift(neuron_locations[1]).set_color(interpolate_color(WHITE, INACTIVE_COLOR, activations[1]))
-    neuron2 = neuron.copy().shift(neuron_locations[2]).set_color(interpolate_color(WHITE, INACTIVE_COLOR, activations[2]))
-    neuron3 = neuron.copy().shift(neuron_locations[3]).set_color(interpolate_color(WHITE, INACTIVE_COLOR, activations[3]))
+    neuron0 = neuron.copy().shift(neuron_locations[0]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[0]))
+    neuron1 = neuron.copy().shift(neuron_locations[1]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[1]))
+    neuron2 = neuron.copy().shift(neuron_locations[2]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[2]))
+    neuron3 = neuron.copy().shift(neuron_locations[3]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[3]))
     neurons = [neuron0, neuron1, neuron2, neuron3]
 
     self.play(AnimationGroup(*[Create(n) for n in neurons], lag_ratio=0.1))
@@ -186,7 +198,7 @@ class spring(Scene):
 
     return ghost, spring
 
-  def create_pins(self, neuron_locations: list[np.ndarray]):
+  def create_pins(self, neuron_locations: list[np.ndarray]) -> list[SVGMobject]:
     """
     Adds three pins, one for each of the 
     """
@@ -207,25 +219,27 @@ class spring(Scene):
 
     self.play(AnimationGroup(c0, c1, c2))
 
-  def inference(self, neurons: list[Circle], ghost1: Circle, weights: list[Line], spring: SpringMaob):
+    return [pin0, pin1, pin2]
+
+  def inference(self, neurons: list[Circle], ghost1: Circle, weights: list[Line], spring: SpringMaob, offset: float) -> tuple[list[Circle], list[SpringMaob]]:
     ghost0 = neurons[1].copy().set_opacity(0.5)
     ghost2 = neurons[3].copy().set_opacity(0.5)
     self.add(ghost0)
     self.add(ghost2)
 
-    displacement = DOWN * 1.5
+    displacement = DOWN * (1.5 - offset)
     targetColor = interpolate_color(WHITE, INACTIVE_COLOR, 0.5)
     leftNeuronAnim = neurons[1].animate(rate_func=spring_interp).set(fill_color=targetColor).shift(displacement)
 
     spring0 = SpringMaob(ghost0.get_center(), 0.1, width=0.2)
-    stretchAnim0 = spring0.animate(1.5)
+    stretchAnim0 = spring0.animate(1.5 - offset)
 
     spring1 = SpringMaob(ghost2.get_center(), 0.1, width=0.2)
-    stretchAnim1 = spring1.animate(1.5)
+    stretchAnim1 = spring1.animate(1.5 - offset)
 
     # Set this spring animation to be pinned at the bottom
     spring.set_pin('bot')
-    stretchAnim2 = spring.animate(1.5)
+    stretchAnim2 = spring.animate(1.5 - offset)
 
     topWeightAnim = weights[1].animate(rate_func=spring_interp).shift(displacement)
     bottomWeightAnim = weights[2].animate(rate_func=spring_interp).shift(displacement)
@@ -236,3 +250,26 @@ class spring(Scene):
     allAnims = [leftNeuronAnim, topWeightAnim, bottomWeightAnim, topGhostAnim, bottomGhostAnim, stretchAnim0, stretchAnim1, stretchAnim2]
 
     self.play(AnimationGroup(*allAnims), run_time=4)
+
+    return [ghost0, ghost1, ghost2], [spring0, spring, spring1]
+
+  def update_weights(self, weights: list[Line], dw: float, ghost_neurons: list[Circle], springs: list[SpringMaob]) -> list[Line]:
+    """
+    Moves the weights to minimize the error
+    """
+
+    ghost_weights = [w.copy().set_opacity(0.4) for w in weights]
+    self.add(*ghost_weights)
+
+    dws = [dw, dw, -dw]
+    move_weight_anims = [w.animate.put_start_and_end_on(w.get_start(), w.get_end() + DOWN * dws[i]) for (i, w) in enumerate(weights)]
+
+    move_ghost_anims = [gn.animate.shift(DOWN * dws[i]) for (i, gn) in enumerate(ghost_neurons)]
+
+    springs[0].set_pin('bot')
+    springs[1].set_pin('bot')
+    springs[2].set_pin('top')
+    spring_anims = [s.animate(s.get_height() - dw, rate_func=rate_functions.smooth) for s in springs]
+
+    self.play(AnimationGroup(*move_weight_anims, *move_ghost_anims, *spring_anims))
+    self.play(AnimationGroup(*[FadeOut(gw) for gw in ghost_weights]))
