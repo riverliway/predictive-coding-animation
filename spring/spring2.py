@@ -117,15 +117,18 @@ class spring(Scene):
     self.change_label('Calculate Error')
     ghost, spring = self.add_error(neurons[2], step * movement * 2)
 
-    self.wait()
+    if self.step == 0:
+      self.wait()
 
     pins = self.create_pins([n.get_center() for n in neurons])
 
     self.change_label('Inference')
-    self.wait()
+    if self.step == 0:
+      self.wait()
     ghost_neurons, springs = self.inference(neurons, ghost, weights, spring, first_offset)
     
-    self.wait()
+    if self.step == 0:
+      self.wait()
 
     self.change_label('Update Weights')
     self.update_weights(weights, movement, ghost_neurons, springs)
@@ -155,7 +158,7 @@ class spring(Scene):
 
     if new == 'Updated Prediction':
       new_step_label = Text(str(self.step + 2)).shift(LEFT * 4.9 + UP * 2.05)
-      anims.append(Transform(self.step_label, new_step_label))
+      anims.append(ReplacementTransform(self.step_label, new_step_label))
       self.step_label = new_step_label
 
     if new == 'Prediction':
