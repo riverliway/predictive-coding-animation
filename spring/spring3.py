@@ -91,7 +91,6 @@ class SpringMaob:
     self.__height = height
     return obj.stretch(ratio, 1).shift(target_pos - pinned_pos)
 
-
 class spring(Scene):
   def construct(self):
     neuron_locations = self.construct_baseplates()
@@ -183,7 +182,7 @@ class spring(Scene):
     base = RoundedRectangle(corner_radius=0.1, sheen_factor=0.2, sheen_direction=[-1, -1, 0], color=BLACK, stroke_color=BASEPLATE_OUTLINE, stroke_width=2, width=1.5, height=2)
     base = base.set_opacity(1).apply_matrix([[1, 1], [0, 2]])
     rect1 = base.copy().shift(1.3 * DOWN + 3 * LEFT)
-    rect2 = base.copy().shift(1.3 * DOWN + 1 * LEFT)
+    rect2 = base.copy().shift(1.3 * DOWN + 0 * LEFT)
     rect3 = base.copy().shift(1.3 * DOWN, 3 * RIGHT)
     self.add(rect1, rect2, rect3)
 
@@ -195,9 +194,9 @@ class spring(Scene):
     # scale1 = VGroup(pole, dLine1, dLine2, dLine3)
     # In the most recent revision, the client asked for 
     scale1 = VGroup(pole)
-    scale2 = scale1.copy().shift(RIGHT * 2)
-    scale3 = scale2.copy().shift(RIGHT * 4.75 + POLE_HEIGHT / 2 * UP)
-    scale4 = scale2.copy().shift(RIGHT * 3.25 + POLE_HEIGHT / 2 * DOWN)
+    scale2 = scale1.copy().shift(RIGHT * 3)
+    scale3 = scale2.copy().shift(RIGHT * 3.75 + POLE_HEIGHT / 2 * UP)
+    scale4 = scale2.copy().shift(RIGHT * 2.25 + POLE_HEIGHT / 2 * DOWN)
 
     self.add(scale1, scale2, scale3, scale4)
 
@@ -234,7 +233,7 @@ class spring(Scene):
 
     Returns: the ghost neuron and the error spring
     """
-    ghost = neuron.copy().set_opacity(0.5)
+    ghost = neuron.copy().set_opacity(0.5).set_z_index(19)
     self.add(ghost)
 
     height = POLE_HEIGHT - offset
@@ -268,8 +267,8 @@ class spring(Scene):
     return [pin0, pin1, pin2]
 
   def inference(self, neurons: list[Circle], ghost1: Circle, weights: list[Line], spring: SpringMaob, offset: float) -> tuple[list[Circle], list[SpringMaob]]:
-    ghost0 = neurons[1].copy().set_opacity(0.5)
-    ghost2 = neurons[3].copy().set_opacity(0.5)
+    ghost0 = neurons[1].copy().set_opacity(0.5).set_z_index(19)
+    ghost2 = neurons[3].copy().set_opacity(0.5).set_z_index(19)
     self.add(ghost0)
     self.add(ghost2)
 
