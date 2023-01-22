@@ -272,19 +272,19 @@ class spring(Scene):
     self.add(ghost0)
     self.add(ghost2)
 
-    displacement = DOWN * (1.5 - offset)
+    displacement = DOWN * (POLE_HEIGHT / 2 - offset)
     targetColor = interpolate_color(WHITE, INACTIVE_COLOR, 0.5)
     leftNeuronAnim = neurons[1].animate(rate_func=spring_interp).set(fill_color=targetColor).shift(displacement)
 
     spring0 = SpringMaob(ghost0.get_center(), 0.1, width=0.2)
-    stretchAnim0 = spring0.animate(1.5 - offset)
+    stretchAnim0 = spring0.animate(POLE_HEIGHT / 2 - offset)
 
     spring1 = SpringMaob(ghost2.get_center(), 0.1, width=0.2)
-    stretchAnim1 = spring1.animate(1.5 - offset)
+    stretchAnim1 = spring1.animate(POLE_HEIGHT / 2 - offset)
 
     # Set this spring animation to be pinned at the bottom
     spring.set_pin('bot')
-    stretchAnim2 = spring.animate(1.5 - offset)
+    stretchAnim2 = spring.animate(POLE_HEIGHT / 2 - offset)
 
     topWeightAnim = weights[1].animate(rate_func=spring_interp).shift(displacement)
     bottomWeightAnim = weights[2].animate(rate_func=spring_interp).shift(displacement)
