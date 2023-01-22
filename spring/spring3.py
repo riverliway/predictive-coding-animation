@@ -163,13 +163,13 @@ class spring(Scene):
     self.label = new_label
 
     if new == 'UPDATED PREDICTION':
-      new_step_label = Text(str(self.step + 2), font=FONT, font_size=FONT_SIZE).shift(LEFT * 4.9 + UP * 2.05)
+      new_step_label = Text(str(self.step + 2), font=FONT, font_size=FONT_SIZE).shift(LEFT * 5.4 + UP * 2.5)
       anims.append(ReplacementTransform(self.step_label, new_step_label))
       self.step_label = new_step_label
 
     if new == 'PREDICTION':
-      self.step_label = Text('1', font=FONT, font_size=FONT_SIZE).shift(LEFT * 4.9 + UP * 2.05)
-      step = Text('STEP', font=FONT, font_size=FONT_SIZE).shift(LEFT * 5.9 + UP * 2)
+      self.step_label = Text('1', font=FONT, font_size=FONT_SIZE).shift(LEFT * 5.4 + UP * 2.5)
+      step = Text('STEP', font=FONT, font_size=FONT_SIZE).shift(LEFT * 6.05 + UP * 2.5)
       anims.append(Write(self.step_label))
       anims.append(Write(step))
 
