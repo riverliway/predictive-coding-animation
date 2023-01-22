@@ -9,9 +9,13 @@ import numpy as np
 import math
 
 POLE_COLOR = '#606060'
+BASEPLATE_COLOR = '##0f0f0f'
+BASEPLATE_OUTLINE = '#1F1F1F'
 POLE_HEIGHT = 3
-INACTIVE_COLOR = '#1e3b69'
+INACTIVE_COLOR = '#ee7c31'
+WEIGHT_COLOR = '#5b9bd5'
 FONT = 'Lato'
+FONT_SIZE = 26
 
 def spring_interp (x: float) -> float:
   """
@@ -31,7 +35,7 @@ class SpringMaob:
     self.__height = 1
     self.__pin = 'top'
 
-    self.spring = FunctionGraph(lambda t: np.sin(t), color=RED, x_range=[0, 10 * PI], stroke_width=5)
+    self.spring = FunctionGraph(lambda t: np.sin(t), color=RED, x_range=[0, 10 * PI], stroke_width=2)
     self.spring.rotate(90 * DEGREES)
     self.spring.stretch(1 / (10 * PI), 1)
     self.spring.stretch(0.5 * width, 0)
@@ -113,10 +117,10 @@ class spring(Scene):
     neuron_locations[2] += second_offset * DOWN
 
     if neurons is None:
-      self.change_label('Prediction')
+      self.change_label('PREDICTION')
       neurons, weights = self.create_neurons(neuron_locations, [0, first_offset / POLE_HEIGHT, second_offset / POLE_HEIGHT, 0])
 
-    self.change_label('Calculate Error')
+    self.change_label('CALCULATE ERROR')
     ghost, spring = self.add_error(neurons[2], step * movement * 2)
 
     if self.step == 0:
@@ -124,7 +128,7 @@ class spring(Scene):
 
     pins = self.create_pins([n.get_center() for n in neurons])
 
-    self.change_label('Inference')
+    self.change_label('INFERENCE')
     if self.step == 0:
       self.wait()
     ghost_neurons, springs = self.inference(neurons, ghost, weights, spring, first_offset)
@@ -132,11 +136,11 @@ class spring(Scene):
     if self.step == 0:
       self.wait()
 
-    self.change_label('Update Weights')
+    self.change_label('UPDATE WEIGHTS')
     self.update_weights(weights, movement, ghost_neurons, springs)
 
     # Fade out unnecessary things
-    self.change_label('Updated Prediction')
+    self.change_label('UPDATED PREDICTION')
     pins_fade = [FadeOut(p) for p in pins[1:]]
 
     self.play(AnimationGroup(*pins_fade, run_time=self.speedup))
@@ -146,7 +150,7 @@ class spring(Scene):
     return neurons, weights
 
   def change_label(self, new):
-    new_label = Text(new, font=FONT).shift(LEFT * 6.5 + UP * 3)
+    new_label = Text(new, font=FONT, font_size=FONT_SIZE).shift(LEFT * 6.5 + UP * 3)
     new_label.shift(new_label.get_center() - new_label.get_left())
 
     anims = []
@@ -158,14 +162,14 @@ class spring(Scene):
 
     self.label = new_label
 
-    if new == 'Updated Prediction':
-      new_step_label = Text(str(self.step + 2), font=FONT).shift(LEFT * 4.9 + UP * 2.05)
+    if new == 'UPDATED PREDICTION':
+      new_step_label = Text(str(self.step + 2), font=FONT, font_size=FONT_SIZE).shift(LEFT * 4.9 + UP * 2.05)
       anims.append(ReplacementTransform(self.step_label, new_step_label))
       self.step_label = new_step_label
 
-    if new == 'Prediction':
-      self.step_label = Text('1', font=FONT).shift(LEFT * 4.9 + UP * 2.05)
-      step = Text('Step', font=FONT).shift(LEFT * 5.9 + UP * 2)
+    if new == 'PREDICTION':
+      self.step_label = Text('1', font=FONT, font_size=FONT_SIZE).shift(LEFT * 4.9 + UP * 2.05)
+      step = Text('STEP', font=FONT, font_size=FONT_SIZE).shift(LEFT * 5.9 + UP * 2)
       anims.append(Write(self.step_label))
       anims.append(Write(step))
 
@@ -176,18 +180,21 @@ class spring(Scene):
     Constructs the base rectangles and the scales for each neuron
     Returns: a list of coords for where the neurons go
     """
-    base = RoundedRectangle(corner_radius=0.1, color=DARK_GRAY, width=1.5, height=2).set_opacity(1).apply_matrix([[1, 1], [0, 2]])
+    base = RoundedRectangle(corner_radius=0.1, sheen_factor=0.2, sheen_direction=[-1, -1, 0], color=BLACK, stroke_color=BASEPLATE_OUTLINE, stroke_width=2, width=1.5, height=2)
+    base = base.set_opacity(1).apply_matrix([[1, 1], [0, 2]])
     rect1 = base.copy().shift(1.3 * DOWN + 3 * LEFT)
     rect2 = base.copy().shift(1.3 * DOWN + 1 * LEFT)
     rect3 = base.copy().shift(1.3 * DOWN, 3 * RIGHT)
     self.add(rect1, rect2, rect3)
 
-    pole = Rectangle(color=POLE_COLOR, width=0.2, height=POLE_HEIGHT).set_opacity(1).shift(rect1.get_center()).shift(UP * POLE_HEIGHT / 2)
+    pole = Rectangle(color=POLE_COLOR, width=0.1, height=POLE_HEIGHT, stroke_width=0).set_opacity(0.6).shift(rect1.get_center()).shift(UP * POLE_HEIGHT / 2)
     dLine1 = DashedLine(rect1.get_center() + 0.5 * LEFT, rect1.get_center() + 0.5 * RIGHT).set_color(POLE_COLOR)
     dLine2 = dLine1.copy().shift(UP * POLE_HEIGHT / 2)
     dLine3 = dLine2.copy().shift(UP * POLE_HEIGHT / 2)
 
-    scale1 = VGroup(pole, dLine1, dLine2, dLine3)
+    # scale1 = VGroup(pole, dLine1, dLine2, dLine3)
+    # In the most recent revision, the client asked for 
+    scale1 = VGroup(pole)
     scale2 = scale1.copy().shift(RIGHT * 2)
     scale3 = scale2.copy().shift(RIGHT * 4.75 + POLE_HEIGHT / 2 * UP)
     scale4 = scale2.copy().shift(RIGHT * 3.25 + POLE_HEIGHT / 2 * DOWN)
@@ -203,7 +210,7 @@ class spring(Scene):
 
     Returns: all of the neurons and all of the weights
     """
-    neuron = Circle(radius=0.5, color=WHITE, z_index=20).set_opacity(1)
+    neuron = Circle(radius=0.5, color=WHITE, z_index=20, stroke_width=2, stroke_color=INACTIVE_COLOR).set_opacity(1)
     neuron0 = neuron.copy().shift(neuron_locations[0]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[0]))
     neuron1 = neuron.copy().shift(neuron_locations[1]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[1]))
     neuron2 = neuron.copy().shift(neuron_locations[2]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[2]))
@@ -212,9 +219,9 @@ class spring(Scene):
 
     self.play(AnimationGroup(*[Create(n) for n in neurons], lag_ratio=0.1))
 
-    weight0 = Line(start=neuron0.get_center(), end=neuron1.get_center(), color=YELLOW)
-    weight1 = Line(start=neuron1.get_center(), end=neuron2.get_center(), color=YELLOW)
-    weight2 = Line(start=neuron1.get_center(), end=neuron3.get_center(), color=YELLOW)
+    weight0 = Line(start=neuron0.get_center(), end=neuron1.get_center(), color=WEIGHT_COLOR, stroke_width=2)
+    weight1 = Line(start=neuron1.get_center(), end=neuron2.get_center(), color=WEIGHT_COLOR, stroke_width=2)
+    weight2 = Line(start=neuron1.get_center(), end=neuron3.get_center(), color=WEIGHT_COLOR, stroke_width=2)
 
     self.play(AnimationGroup(Create(weight0), Create(VGroup(weight1, weight2), lag_ratio=0), lag_ratio=0.3))
 
@@ -242,8 +249,7 @@ class spring(Scene):
     """
     Adds three pins, one for each of the 
     """
-    pin = SVGMobject('./pin.svg', height=0.6, width=0.6, z_index=26, stroke_color=BLACK).apply_matrix([[-1, 0], [0, 1]])
-    pin.shift(UR * 0.1)
+    pin = SVGMobject('./pin2.svg', height=0.6, width=0.6, z_index=26).scale(0.5)
 
     pin0 = pin.copy().shift(neuron_locations[0])
     pin1 = pin.copy().shift(neuron_locations[3])
