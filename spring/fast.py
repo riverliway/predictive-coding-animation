@@ -107,6 +107,7 @@ class spring(Scene):
       if i == 0:
         neurons, weights, ghosts, springs = self.train(i, neuron_locations, neurons, weights)
       else:
+        self.speedup = 0.2
         self.train_fast(neurons, weights, ghosts, springs)
 
     self.wait()
@@ -153,14 +154,42 @@ class spring(Scene):
     springs[2].set_pin('top')
     botSpringAnim = springs[2].animate(0.1, rate_func=rate_functions.smooth)
 
+    springs[1].set_pin('bot')
+    topSpringAnim = springs[1].animate(springs[1].get_height() + displacement[1], rate_func=rate_functions.smooth)
+
     topWeightAnim = weights[1].animate.shift(displacement)
     botWeightAnim = weights[2].animate.shift(displacement)
 
-    botGhostAnim = ghosts[1].animate.shift(displacement)
-    topGhostAnim = ghosts[2].animate.shift(displacement)
+    botGhostAnim = ghosts[1].animate.shift(displacement).set(fill_color=active_color(get_activation(ghosts[1].copy().shift(displacement))))
+    topGhostAnim = ghosts[2].animate.shift(displacement).set(fill_color=active_color(get_activation(ghosts[2].copy().shift(displacement))))
 
-    anims = [leftNeuronAnim, leftSpringAnim, botSpringAnim, topWeightAnim, botWeightAnim, botGhostAnim, topGhostAnim]
-    self.play(AnimationGroup(*anims), run_time=0.8)
+    anims = [leftNeuronAnim, leftSpringAnim, botSpringAnim, topSpringAnim, topWeightAnim, botWeightAnim, botGhostAnim, topGhostAnim]
+    self.play(AnimationGroup(*anims), run_time=0.35)
+
+    self.inference_fast(neurons, weights, ghosts, springs)
+    # self.update_weights_fast(POLE_HEIGHT / 12, neurons, weights, ghosts, springs)
+    self.update_weights(weights, POLE_HEIGHT / 12, ghosts, springs)
+
+  def inference_fast(self, neurons, weights, ghosts, springs):
+    """
+    Similar to the other inference method, but skips a lot of animations to make it faster
+    """
+
+    displacement = pole2.get_center() - neurons[1].get_center()
+    leftNeuronAnim = neurons[1].animate(rate_func=spring_interp).shift(displacement).set(fill_color=active_color(0.5))
+
+    topWeightAnim = weights[1].animate(rate_func=spring_interp).shift(displacement)
+    botWeightAnim = weights[2].animate(rate_func=spring_interp).shift(displacement)
+
+    botGhostAnim = ghosts[1].animate(rate_func=spring_interp).shift(displacement).set(fill_color=active_color(get_activation(ghosts[1].copy().shift(displacement))))
+    topGhostAnim = ghosts[2].animate(rate_func=spring_interp).shift(displacement).set(fill_color=active_color(get_activation(ghosts[2].copy().shift(displacement))))
+
+    leftSpringAnim = springs[0].animate(-displacement[1])
+    botSpringAnim = springs[2].animate(-displacement[1])
+    topSpringAnim = springs[1].animate(springs[1].get_height() + displacement[1])
+
+    anims = [leftNeuronAnim, topWeightAnim, botWeightAnim, topGhostAnim, botGhostAnim, leftSpringAnim, botSpringAnim, topSpringAnim]
+    self.play(AnimationGroup(*anims), run_time=1.5)
 
   def construct_baseplates(self) -> list[np.ndarray]:
     """
@@ -195,10 +224,10 @@ class spring(Scene):
     Returns: all of the neurons and all of the weights
     """
     neuron = Circle(radius=0.5, color=WHITE, z_index=20, stroke_width=2, stroke_color=INACTIVE_COLOR).set_opacity(1)
-    neuron0 = neuron.copy().shift(neuron_locations[0]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[0]))
-    neuron1 = neuron.copy().shift(neuron_locations[1]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[1]))
-    neuron2 = neuron.copy().shift(neuron_locations[2]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[2]))
-    neuron3 = neuron.copy().shift(neuron_locations[3]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, activations[3]))
+    neuron0 = neuron.copy().shift(neuron_locations[0]).set(fill_color=active_color(activations[0]))
+    neuron1 = neuron.copy().shift(neuron_locations[1]).set(fill_color=active_color(activations[1]))
+    neuron2 = neuron.copy().shift(neuron_locations[2]).set(fill_color=active_color(activations[2]))
+    neuron3 = neuron.copy().shift(neuron_locations[3]).set(fill_color=active_color(activations[3]))
     neurons = [neuron0, neuron1, neuron2, neuron3]
 
     self.play(AnimationGroup(*[Create(n) for n in neurons], lag_ratio=0.1))
@@ -294,7 +323,7 @@ class spring(Scene):
     dws = [dw, dw, -dw]
     move_weight_anims = [w.animate.put_start_and_end_on(w.get_start(), w.get_end() + DOWN * dws[i]) for (i, w) in enumerate(weights)]
 
-    move_ghost_anims = [gn.animate.shift(DOWN * dws[i]).set(fill_color=interpolate_color(WHITE, INACTIVE_COLOR, get_activation(gn.copy().shift(DOWN * dws[i])))) for (i, gn) in enumerate(ghost_neurons)]
+    move_ghost_anims = [gn.animate.shift(DOWN * dws[i]).set(fill_color=active_color(get_activation(gn.copy().shift(DOWN * dws[i])))) for (i, gn) in enumerate(ghost_neurons)]
 
     springs[0].set_pin('bot')
     springs[1].set_pin('bot')
@@ -303,6 +332,12 @@ class spring(Scene):
 
     self.play(AnimationGroup(*move_weight_anims, *move_ghost_anims, *spring_anims), run_time=self.speedup)
     self.play(AnimationGroup(*[FadeOut(gw) for gw in ghost_weights]), run_time=self.speedup)
+
+def active_color(alpha: float):
+  """
+  Get the color of a neuron based on how active it is
+  """
+  return interpolate_color(WHITE, INACTIVE_COLOR, alpha)
 
 pole1 = None
 pole2 = None
