@@ -1,5 +1,6 @@
 """
 A different scene that renders the PCN
+11:30pt
 manim render -pqh network.py network
 """
 
@@ -18,12 +19,8 @@ class network(Scene):
   def construct(self):
     network = Network([1, 1, 2], vert_space=4)
     network.set_activations([[0], [0.5], [1, 0]])
-
-    neuron = ImageMobject('./error.png').set_z_index(8).scale(0.24)
-
-    self.add(neuron)
-    self.add(*[n.get_circle() for n in flat(network.get_neurons())])
-    self.add(*flat(network.get_weights()))
+    network.disable_error()
+    self.add(*network.get_moabs())
 
     base1 = RoundedRectangle(corner_radius=0.1, sheen_factor=0.2, sheen_direction=[-1, -1, 0], color=BLACK, stroke_color=BASEPLATE_OUTLINE, stroke_width=2, width=1.5, height=2 * 2.6)
     base1.set_opacity(1)
@@ -78,6 +75,10 @@ class Network:
   def get_weights(self):
     return self.weights
 
+  def get_moabs(self):
+    neuronMoabs = [n.get_moabs() for n in flat(self.neurons)]
+    return flat([neuronMoabs, self.weights])
+
   def set_activations(self, activations: list[list[float]]):
     """
     Sets every neuron activations without animation
@@ -97,6 +98,25 @@ class Network:
 
     return AnimationGroup(*anims)
 
+  def set_error_positions(self, errors: list[list[float]]):
+    """
+    Sets every error position without animation
+    """
+    for (error_layer, neuron_layer) in zip(errors, self.neurons):
+      for (error, neuron) in zip(error_layer, neuron_layer):
+        neuron.set_error_position(error)
+
+  def animate_error_positions(self, errors: list[list[float]], rate_func=rate_functions.smooth):
+    """
+    Animate every neuron activation
+    """
+    anims = []
+    for (error_layer, neuron_layer) in zip(errors, self.neurons):
+      for (error, neuron) in zip(error_layer, neuron_layer):
+        anims.append(neuron.animate_error_position(error, rate_func))
+
+    return AnimationGroup(*anims)
+
   def pin_neurons(self, locations: list[tuple[int, int, Literal['on', 'off']]]):
     """
     Pins multiple neurons, where the locations are listed as tuples.
@@ -111,16 +131,22 @@ class Network:
 
     return AnimationGroup(*anims)
 
-  def reset_pin_z_index(self):
+  def disable_error(self):
+    """
+    Disables the error glow from all neurons
+    """
     for n in flat(self.neurons):
-      if n.pin is not None:
-        n.pin.set_z_index(26)
+      n.disable_error()
 
 class Neuron:
   def __init__(self):
     self.active = 1
     self.pin = None
     self.circle = Circle(radius=0.5, color=WHITE, z_index=20, stroke_width=2, stroke_color=INACTIVE_COLOR).set_opacity(1)
+    self.errorCircle = ImageMobject('./error.png').set_z_index(8).scale(0.24)
+    self.errorPos = 0
+    self.errorScale = 1
+    self.error_enabled = True
 
   def create_pin(self):
     """
@@ -140,6 +166,31 @@ class Neuron:
     """
     if self.pin is not None:
       return FadeOut(self.pin, shift=UP * 0.3)
+
+  def disable_error(self):
+    """
+    Removes the error glow from being shown at all
+    """
+    self.error_enabled = False
+    self.errorPos = self.active
+    self.__update_error(self.errorCircle)
+
+  def set_error_position(self, position):
+    """
+    Sets the error position (ghost neuron) to the desired spot
+    Does not use animation.
+    """
+    self.error_enabled = True
+    self.errorPos = position
+    self.__update_error(self.errorCircle)
+
+  def animate_error_position(self, position, rate_func):
+    """
+    Animates the error position (ghost neuron) to the desired spot
+    """
+    self.error_enabled = True
+    self.errorPos = position
+    return self.__update_error(self.errorCircle.animate(rate_func=rate_func))
   
   def set_activation(self, active: float):
     """
@@ -147,7 +198,7 @@ class Neuron:
     active parameter should be between 0 and 1
     """
     self.active = active
-    self.__update_activation(self.circle)
+    self.__update_activation(self.circle, self.errorCircle)
 
   def animate_activation(self, active: float, rate_func):
     """
@@ -156,22 +207,51 @@ class Neuron:
     rate_func parameter should be a rate function
     """
     self.active = active
-    return self.__update_activation(self.circle.animate(rate_func=rate_func))
+    anims = self.__update_activation(self.circle.animate(rate_func=rate_func), self.errorCircle.animate(rate_func=rate_func))
+    return AnimationGroup(*anims)
 
   def shift(self, amount: np.ndarray, animate=False):
     """
     Shifts the entire neuron the amount provided
     If the animate flag is set, it returns an animation
     """
-    obj = self.circle.animate if animate else self.circle
-    return obj.shift(amount)
+    anims = []
+    anims.append((self.circle.animate if animate else self.circle).shift(amount))
+    anims.append((self.errorCircle.animate if animate else self.errorCircle).shift(amount))
+    if self.pin is not None:
+      anims.append((self.pin.animate if animate else self.pin).shift(amount))
 
-  def __update_activation(self, obj):
+    if animate:
+      return AnimationGroup(*anims)
+
+  def __update_activation(self, neuron, errorCircle):
     """
     Updates the activation of the neuron.
-    The obj parameter should either be the circle or the circle's animation for updating
+    The neuron/errorCircle parameter should either be the circle or the circle's animation for updating
     """
-    return obj.set(fill_color=self.__active_color(self.active))
+    anims = []
+    anims.append(neuron.set(fill_color=self.__active_color(self.active)))
+    if self.error_enabled:
+      anims.append(self.__update_error(errorCircle))
+    return anims
+
+  def __update_error(self, errorCricle):
+    """
+    Updates the error of a neuron.
+    The errorCircle parameter should either be the circle or the circle's animation for updating
+    """
+
+    # Since we cannot scale the error to 0 because it would be impossble to scale back to 1,
+    # We scale it just so it is invisible behind the neuron
+    MIN_SCALE = 0.6
+
+    error = abs(self.errorPos - self.active)
+    width = interpolate(MIN_SCALE, 1, self.errorScale)
+    scale = 1 + (interpolate(MIN_SCALE, 1, error) - width) / width
+
+    anim = errorCricle.scale(scale)
+    self.errorScale = (scale * width - MIN_SCALE) / MIN_SCALE
+    return anim
 
   def __active_color(self, alpha: float) -> color.Color:
     """
@@ -181,6 +261,13 @@ class Neuron:
 
   def get_circle(self):
     return self.circle
+
+  def get_moabs(self):
+    moabs = [self.circle, self.errorCircle]
+    if self.pin is not None:
+      moabs.append(self.pin)
+
+    return moabs
 
 def spring_interp (x: float) -> float:
   """
