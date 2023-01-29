@@ -1,6 +1,5 @@
 """
 A different scene that renders the PCN
-11:30pt-1pt
 manim render -pqh network.py network
 """
 
@@ -14,51 +13,7 @@ BASEPLATE_COLOR = '##0f0f0f'
 BASEPLATE_OUTLINE = '#1F1F1F'
 FONT = 'Lato'
 FONT_SIZE = 26
-
-class network(Scene):
-  def construct(self):
-    # Contruct the network
-    network = Network([1, 1, 2], self.add, vert_space=4)
-    network.set_activations([[1], [0.5], [0, 1]])
-    network.disable_error()
-    self.add(*network.get_moabs())
-
-    # Create the base plates
-    base1 = RoundedRectangle(corner_radius=0.1, sheen_factor=0.2, sheen_direction=[-1, -1, 0], color=BLACK, stroke_color=BASEPLATE_OUTLINE, stroke_width=2, width=1.5, height=2 * 2.6)
-    base1.set_opacity(1)
-    base2 = base1.copy().shift(LEFT * 3)
-    base3 = base1.copy().shift(RIGHT * 3)
-    self.add(base1, base2, base3)
-
-    # Create the pins so we can remove them in the animation
-    first_pin_locs = [
-      (0, 0, 'on'),
-      (2, 0, 'on'),
-      (2, 1, 'on')
-    ]
-    self.play(network.pin_neurons(first_pin_locs))
-    self.wait()
-
-    # Remove the pins and reset the network
-    second_pin_locs = [(x, y, 'off') for (x, y, _) in first_pin_locs]
-    reset_activations = network.animate_activations([[1], [1], [1, 1]])
-    self.play(AnimationGroup(network.pin_neurons(second_pin_locs), reset_activations))
-    self.wait()
-
-    # Forward propagation
-    self.play(network.forward())
-    self.wait()
-
-    # Move the top right neuron to inactive
-    network.set_error_positions([[1], [1], [1, 1]])
-    self.play(network.animate_activations([[1], [1], [0, 1]]))
-    self.wait()
-
-    # Inference
-    ground_activations = [[1], [0.5], [1, 1]]
-    self.play(network.animate_inference(ground_activations, 4))
-    self.wait()
-
+    
 class Network:
   def __init__(self, layer_dims: list[int], add, horz_space = 3, vert_space = 2):
     self.layer_dims = layer_dims
@@ -68,6 +23,8 @@ class Network:
 
     # Create neurons in the layer dimensions provided
     self.neurons = [[Neuron() for _ in range(layer_dim)] for layer_dim in layer_dims]
+    self.pulses = []
+    self.trails = []
 
     for (i, layer) in enumerate(self.neurons):
       for (j, neuron) in enumerate(layer):
@@ -97,7 +54,7 @@ class Network:
     for layer in range(len(self.weights)):
       anims.append(self.forward_prop(layer))
 
-    return AnimationGroup(*anims, lag_ratio=0.8)
+    return AnimationGroup(*anims, lag_ratio=0.7)
 
   def forward_prop(self, layer):
     """
@@ -109,13 +66,28 @@ class Network:
       pulse = Dot(weight.get_start(), radius=0.03, z_index=13, color=WHITE, fill_opacity=1)
       trail = TracedPath(pulse.get_center, dissipating_time=0.5, z_index=13, stroke_color=WHITE, stroke_width=weight.get_stroke_width(), stroke_opacity=[1, 0])
       self.add(pulse, trail)
+      self.pulses.append(pulse)
+      self.trails.append(trail)
       anims.append(pulse.animate.shift(weight.get_end() - weight.get_start()))
 
     return AnimationGroup(*anims)
 
+  def forward_with_activation(self, activations: list[list[float]]):
+    """
+    Forward propagation, but the activations are also animated
+    """
+    anims = []
+    for i in range(len(self.neurons) - 1):
+      anims.append(self.animate_activations_layer(activations[i], i))
+      anims.append(self.forward_prop(i))
+
+    anims.append(self.animate_activations_layer(activations[-1], len(activations) - 1))
+
+    return AnimationGroup(*anims, lag_ratio=0.7)
+
   def get_moabs(self):
     neuronMoabs = [n.get_moabs() for n in flat(self.neurons)]
-    return flat([neuronMoabs, self.weights])
+    return flat([neuronMoabs, self.weights, self.pulses, self.trails])
 
   def set_activations(self, activations: list[list[float]]):
     """
@@ -130,9 +102,18 @@ class Network:
     Animate every neuron activation
     """
     anims = []
-    for (activation_layer, neuron_layer) in zip(activations, self.neurons):
-      for (activation, neuron) in zip(activation_layer, neuron_layer):
-        anims.append(neuron.animate_activation(activation, rate_func))
+    for (i, activation_layer) in enumerate(activations):
+      anims.append(self.animate_activations_layer(activation_layer, i))
+
+    return AnimationGroup(*anims)
+
+  def animate_activations_layer(self, activations: list[float], layer: int, rate_func=rate_functions.smooth):
+    """
+    Animate every neuron activation in a specified layer index
+    """
+    anims = []
+    for (activation, neuron) in zip(activations, self.neurons[layer]):
+      anims.append(neuron.animate_activation(activation, rate_func))
 
     return AnimationGroup(*anims)
 
@@ -202,7 +183,7 @@ class Neuron:
     self.active = 1
     self.pin = None
     self.circle = Circle(radius=0.5, color=WHITE, z_index=20, stroke_width=2, stroke_color=INACTIVE_COLOR).set_opacity(1)
-    self.errorCircle = ImageMobject('./error.png').set_z_index(8).scale(0.24)
+    self.errorCircle = ImageMobject('./error.png').set_z_index(8).scale(0.26)
     self.errorPos = 0
     self.errorScale = 1
     self.error_enabled = True
@@ -224,7 +205,9 @@ class Neuron:
     Fades out the pin if exists
     """
     if self.pin is not None:
-      return FadeOut(self.pin, shift=UP * 0.3)
+      pin = self.pin
+      self.pin = None
+      return FadeOut(pin, shift=UP * 0.3)
 
   def disable_error(self):
     """
@@ -327,6 +310,83 @@ class Neuron:
       moabs.append(self.pin)
 
     return moabs
+
+class network(Scene):
+  def construct(self):
+    network3 = self.animate_221()
+    self.animate_3x3(network3)
+
+  def animate_221(self):
+    # Contruct the network
+    network = Network([1, 1, 2], self.add, vert_space=4)
+    network.set_activations([[1], [0.5], [0, 1]])
+    network.disable_error()
+    self.add(*network.get_moabs())
+
+    # Create the base plates
+    base1 = RoundedRectangle(corner_radius=0.1, sheen_factor=0.2, sheen_direction=[-1, -1, 0], color=BLACK, stroke_color=BASEPLATE_OUTLINE, stroke_width=2, width=1.5, height=2 * 2.6)
+    base1.set_opacity(1)
+    base2 = base1.copy().shift(LEFT * 3)
+    base3 = base1.copy().shift(RIGHT * 3)
+    self.add(base1, base2, base3)
+
+    # Create the pins so we can remove them in the animation
+    first_pin_locs = [
+      (0, 0, 'on'),
+      (2, 0, 'on'),
+      (2, 1, 'on')
+    ]
+    self.play(network.pin_neurons(first_pin_locs))
+    self.wait()
+
+    # Remove the pins and reset the network
+    second_pin_locs = [(x, y, 'off') for (x, y, _) in first_pin_locs]
+    reset_activations = network.animate_activations([[1], [1], [1, 1]])
+    self.play(AnimationGroup(network.pin_neurons(second_pin_locs), reset_activations))
+    self.wait()
+
+    # Forward propagation
+    self.play(network.forward())
+    self.wait()
+
+    # Move the top right neuron to inactive
+    network.set_error_positions([[1], [1], [1, 1]])
+    self.play(network.animate_activations([[1], [1], [0, 1]]))
+    self.play(network.pin_neurons(first_pin_locs))
+    self.wait()
+
+    # Inference
+    ground_activations = [[1], [0.5], [1, 1]]
+    self.play(network.animate_inference(ground_activations, run_time=4))
+    self.wait()
+
+    # Fade out 2-2-1 network and fade in 3x3 network
+    old_network_anims = [FadeOut(o) for o in network.get_moabs()]
+    base_anims = [FadeOut(b) for b in [base1, base2, base3]]
+    network = Network([3, 3, 3], self.add)
+    network.disable_error()
+    new_network_anims = [FadeIn(o) for o in network.get_moabs()]
+    self.play(AnimationGroup(*old_network_anims, *base_anims, *new_network_anims))
+
+    return network
+
+  def animate_3x3(self, network: Network):
+    activations = [[0.4, 0.9, 0.1], [0.6, 0.5, 0.9], [0.2, 0.05, 0.8]]
+    self.play(network.forward_with_activation(activations))
+    self.wait()
+
+    # Pin neurons
+    network.set_error_positions(activations)
+    self.play(network.animate_activations(activations[:-1] + [[0.9, 0.1, 0.5]]))
+
+    pin_locs = [(x, y, 'on') for x in [0, 2] for y in [0, 1, 2]]
+    self.play(network.pin_neurons(pin_locs))
+
+    # Inference
+    ground = [activations[0]] + [[0.2, 0.4, 0.1]] + [activations[2]]
+    self.play(network.animate_inference(ground, run_time=4))
+    self.wait()
+
 
 def spring_interp (x: float) -> float:
   """
