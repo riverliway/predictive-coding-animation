@@ -26,19 +26,31 @@ class Network:
     self.pulses = []
     self.trails = []
 
-    for (i, layer) in enumerate(self.neurons):
-      for (j, neuron) in enumerate(layer):
-        # Vertically space neuron appropriately
-        neuron.shift(DOWN * j * vert_space)
-        # Center layer vertically
-        neuron.shift(UP * (len(layer) - 1) * vert_space / 2)
-        # Horizontally space neuron
-        neuron.shift(RIGHT * i * horz_space)
-        # Center layer horizontally
-        neuron.shift(LEFT * (len(layer_dims) - 1) * horz_space / 2)
+    for (i, layer) in enumerate(self.calc_neuron_pos(layer_dims, horz_space, vert_space)):
+      for (j, pos) in enumerate(layer):
+        self.neurons[i][j].shift(pos)
 
     weight: Callable[[Neuron, Neuron], Line] = lambda ln, rn: Line(start=ln.get_circle().get_center(), end=rn.get_circle().get_center(), color=WEIGHT_COLOR, stroke_width=2).set_z_index(12)
     self.weights: list[list[list[Line]]] = [[[weight(ln, rn) for ln in self.neurons[i]] for rn in self.neurons[i + 1]] for i in range(len(self.neurons) - 1)]
+
+  def calc_neuron_pos(self, layer_dims: list[int], horz_space, vert_space):
+    """
+    Calculates the positions for each neuron
+    """
+    poses = [[ORIGIN for _ in range(layer_dim)] for layer_dim in layer_dims]
+
+    for i in range(len(poses)):
+      for j in range(len(poses[i])):
+        # Vertically space neuron appropriately
+        poses[i][j] = DOWN * j * vert_space
+        # Center layer vertically
+        poses[i][j] += UP * (len(poses[i]) - 1) * vert_space / 2
+        # Horizontally space neuron
+        poses[i][j] += RIGHT * i * horz_space
+        # Center layer horizontally
+        poses[i][j] += LEFT * (len(layer_dims) - 1) * horz_space / 2
+
+    return poses
 
   def get_neurons(self):
     return self.neurons
@@ -388,23 +400,41 @@ class network(Scene):
     self.play(network.animate_inference(ground, run_time=4))
     self.wait()
 
-    # Fade into larger network
-    reset_state = [[1, 1, 1], [1, 1, 1], [1, 1, 1]]
-    reset_anim = network.animate_activations(reset_state)
-    error_anim =[FadeOut(n.errorCircle) for n in flat(network.neurons)]
-    pulse_fade = [FadeOut(p) for p in network.pulses]
-    trail_fade = [FadeOut(p) for p in network.trails]
-    pin_removal = network.pin_neurons([(x, y, 'off') for (x, y, _) in pin_locs])
-    previous_network_anim = AnimationGroup(pin_removal, reset_anim, *error_anim, *pulse_fade, *trail_fade)
+    
+    # Reset state
+    # reset_state = [[1, 1, 1], [1, 1, 1], [1, 1, 1]]
+    # reset_anim = network.animate_activations(reset_state)
+    # error_anim =[FadeOut(n.errorCircle) for n in flat(network.neurons)]
+    # pulse_fade = [FadeOut(p) for p in network.pulses]
+    # trail_fade = [FadeOut(p) for p in network.trails]
+    # pin_removal = network.pin_neurons([(x, y, 'off') for (x, y, _) in pin_locs])
+    # previous_network_anim = AnimationGroup(pin_removal, reset_anim, *error_anim, *pulse_fade, *trail_fade)
+    # self.play(previous_network_anim)
+
+    # THIS LOOKED BAD SO JUST FADE
+    # # Set up larger network
+    # network_big = Network([7, 5, 5, 3], self.add)
+    # network_big.disable_error()
+    # leftover_small_moabs = Group(*flat([network.weights, [n.get_circle() for n in flat(network.neurons)]]))
+    # big_network_moabs = Group(*network_big.get_moabs())
+    # big_network_moabs.shift(LEFT * 1.5)
+
+    # # Fade into larger network
+    # old_network_shifts = network.calc_neuron_pos([3, 3, 3], 3, 1.25)
+    # old_network_lambda = lambda n, s: n.get_circle().animate.move_to(s).shift(RIGHT * 1.5).scale(0.8)
+    # old_network_moves = [[old_network_lambda(n, old_network_shifts[i][j]) for (j, n) in enumerate(layer)] for (i, layer) in enumerate(network.neurons)]
+    # old_network_anims = AnimationGroup(*flat(old_network_moves))
+    # new_network_anim = AnimationGroup(FadeIn(big_network_moabs), big_network_moabs.animate.shift(RIGHT * 1.5).scale(0.8), old_network_anims)
+
+    # self.play(new_network_anim)
+
+    old_fades = [FadeOut(o) for o in network.get_moabs()]
 
     network_big = Network([7, 5, 5, 3], self.add, vert_space=1.25)
     network_big.disable_error()
-    leftover_small_moabs = Group(*flat([network.weights, [n.get_circle() for n in flat(network.neurons)]]))
-    big_network_moabs = Group(*network_big.get_moabs())
-    big_network_moabs.shift(LEFT * 1.5).scale(0.8)
-    new_network_anim = AnimationGroup(FadeIn(big_network_moabs), big_network_moabs.animate.shift(RIGHT * 1.5), leftover_small_moabs.animate.shift(RIGHT * 1.5))
-
-    self.play(AnimationGroup(previous_network_anim, new_network_anim))
+    new_moabs = Group(*network_big.get_moabs())
+    new_moabs.scale(0.8)
+    self.play(AnimationGroup(*old_fades, FadeIn(new_moabs)))
 
 def spring_interp (x: float) -> float:
   """
