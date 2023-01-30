@@ -152,7 +152,8 @@ class Network:
         anims.append(neuron.animate_activation(activation, spring_interp))
 
     for neuron in self.neurons[-1]:
-      anims.append(neuron.animate_error_position(neuron.errorPos - average_error, spring_interp))
+      err = neuron.active - average_error if neuron.active - average_error > 0 else neuron.active + average_error
+      anims.append(neuron.animate_error_position(err, spring_interp))
 
     return AnimationGroup(*anims, run_time=run_time)
 
@@ -387,6 +388,23 @@ class network(Scene):
     self.play(network.animate_inference(ground, run_time=4))
     self.wait()
 
+    # Fade into larger network
+    reset_state = [[1, 1, 1], [1, 1, 1], [1, 1, 1]]
+    reset_anim = network.animate_activations(reset_state)
+    error_anim =[FadeOut(n.errorCircle) for n in flat(network.neurons)]
+    pulse_fade = [FadeOut(p) for p in network.pulses]
+    trail_fade = [FadeOut(p) for p in network.trails]
+    pin_removal = network.pin_neurons([(x, y, 'off') for (x, y, _) in pin_locs])
+    previous_network_anim = AnimationGroup(pin_removal, reset_anim, *error_anim, *pulse_fade, *trail_fade)
+
+    network_big = Network([7, 5, 5, 3], self.add, vert_space=1.25)
+    network_big.disable_error()
+    leftover_small_moabs = Group(*flat([network.weights, [n.get_circle() for n in flat(network.neurons)]]))
+    big_network_moabs = Group(*network_big.get_moabs())
+    big_network_moabs.shift(LEFT * 1.5).scale(0.8)
+    new_network_anim = AnimationGroup(FadeIn(big_network_moabs), big_network_moabs.animate.shift(RIGHT * 1.5), leftover_small_moabs.animate.shift(RIGHT * 1.5))
+
+    self.play(AnimationGroup(previous_network_anim, new_network_anim))
 
 def spring_interp (x: float) -> float:
   """
