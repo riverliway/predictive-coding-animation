@@ -400,36 +400,8 @@ class network(Scene):
     self.play(network.animate_inference(ground, run_time=4))
     self.wait()
 
-    
-    # Reset state
-    # reset_state = [[1, 1, 1], [1, 1, 1], [1, 1, 1]]
-    # reset_anim = network.animate_activations(reset_state)
-    # error_anim =[FadeOut(n.errorCircle) for n in flat(network.neurons)]
-    # pulse_fade = [FadeOut(p) for p in network.pulses]
-    # trail_fade = [FadeOut(p) for p in network.trails]
-    # pin_removal = network.pin_neurons([(x, y, 'off') for (x, y, _) in pin_locs])
-    # previous_network_anim = AnimationGroup(pin_removal, reset_anim, *error_anim, *pulse_fade, *trail_fade)
-    # self.play(previous_network_anim)
-
-    # THIS LOOKED BAD SO JUST FADE
-    # # Set up larger network
-    # network_big = Network([7, 5, 5, 3], self.add)
-    # network_big.disable_error()
-    # leftover_small_moabs = Group(*flat([network.weights, [n.get_circle() for n in flat(network.neurons)]]))
-    # big_network_moabs = Group(*network_big.get_moabs())
-    # big_network_moabs.shift(LEFT * 1.5)
-
-    # # Fade into larger network
-    # old_network_shifts = network.calc_neuron_pos([3, 3, 3], 3, 1.25)
-    # old_network_lambda = lambda n, s: n.get_circle().animate.move_to(s).shift(RIGHT * 1.5).scale(0.8)
-    # old_network_moves = [[old_network_lambda(n, old_network_shifts[i][j]) for (j, n) in enumerate(layer)] for (i, layer) in enumerate(network.neurons)]
-    # old_network_anims = AnimationGroup(*flat(old_network_moves))
-    # new_network_anim = AnimationGroup(FadeIn(big_network_moabs), big_network_moabs.animate.shift(RIGHT * 1.5).scale(0.8), old_network_anims)
-
-    # self.play(new_network_anim)
-
+    # Fade into new network
     old_fades = [FadeOut(o) for o in network.get_moabs()]
-
     network_big = Network([7, 5, 5, 3], self.add, vert_space=1.25)
     network_big.disable_error()
     new_moabs = Group(*network_big.get_moabs())
