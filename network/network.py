@@ -84,6 +84,22 @@ class Network:
 
     return AnimationGroup(*anims)
 
+  def backward_prop(self, layer):
+    """
+    Animates backwards propagation of a single layer
+    """
+    weights = self.weights[layer]
+    anims = []
+    for weight in flat(weights):
+      pulse = Dot(weight.get_end(), radius=0.03, z_index=13, color=WHITE, fill_opacity=1)
+      trail = TracedPath(pulse.get_center, dissipating_time=0.5, z_index=13, stroke_color=WHITE, stroke_width=weight.get_stroke_width(), stroke_opacity=[1, 0])
+      self.add(pulse, trail)
+      self.pulses.append(pulse)
+      self.trails.append(trail)
+      anims.append(pulse.animate.shift(weight.get_start() - weight.get_end()))
+
+    return AnimationGroup(*anims)
+
   def forward_with_activation(self, activations: list[list[float]]):
     """
     Forward propagation, but the activations are also animated
@@ -96,6 +112,30 @@ class Network:
     anims.append(self.animate_activations_layer(activations[-1], len(activations) - 1))
 
     return AnimationGroup(*anims, lag_ratio=0.7)
+
+  def backward(self, activations: list[list[float]]):
+    """
+    Classical backwards propagation, but the activations are also animated
+    """
+
+    anims = []
+    for i in reversed(range(1, len(self.neurons))):
+      anims.append(self.animate_layer_error(activations[i], i))
+      anims.append(self.backward_prop(i - 1))
+
+    anims.append(self.animate_layer_error(activations[0], 0))
+
+    return AnimationGroup(*anims, lag_ratio=0.7)
+  
+  def animate_layer_error(self, error_pos: list[float], index: int):
+    """
+    Animates the error changing for a single layer
+    """
+    anims = []
+    for (error, neuron) in zip(error_pos, self.neurons[index]):
+      anims.append(neuron.animate_error_position(error, rate_functions.smooth))
+
+    return AnimationGroup(*anims)
 
   def get_moabs(self):
     neuronMoabs = [n.get_moabs() for n in flat(self.neurons)]
@@ -327,7 +367,8 @@ class Neuron:
 class network(Scene):
   def construct(self):
     network3 = self.animate_221()
-    self.animate_3x3(network3)
+    network_big = self.animate_3x3(network3)
+    self.animate_big(network_big)
 
   def animate_221(self):
     # Contruct the network
@@ -407,6 +448,49 @@ class network(Scene):
     new_moabs = Group(*network_big.get_moabs())
     new_moabs.scale(0.8)
     self.play(AnimationGroup(*old_fades, FadeIn(new_moabs)))
+
+    return network_big
+
+  def animate_big(self, network: Network):
+    activations = [[0.5, 0.1, 0.9, 0.2, 1, 0.8, 0.4], [0.7, 1, 0.2, 0.7, 0.3], [0, 0.8, 0.2, 1, 0.4, 0.6], [1, 0, 0.4]]
+    self.play(network.forward_with_activation(activations))
+    self.wait()
+
+    # Pin neurons
+    network.set_error_positions(activations)
+    self.play(network.animate_activations(activations[:-1] + [[0, 1, 1]]))
+
+    pin_locs = [(0, y, 'on') for y in range(7)] + [(3, y, 'on') for y in range(3)]
+    self.play(network.pin_neurons(pin_locs))
+
+    # Inference
+    ground = [activations[0]] + [[0.3, 0, 0.1, 0.2, 0.9], [0.9, 0.6, 0.8, 0, 0.5, 0.2]] + [activations[3]]
+    self.play(network.animate_inference(ground, run_time=4))
+    self.wait()
+
+    fades = [FadeOut(o) for o in network.get_moabs()]
+    self.play(AnimationGroup(*fades))
+    self.wait()
+
+class classical(Scene):
+  def construct(self):
+    network = Network([7, 5, 5, 3], self.add, vert_space=1.25)
+    network.disable_error()
+    new_moabs = Group(*network.get_moabs())
+    new_moabs.scale(0.8)
+    self.play(FadeIn(new_moabs))
+
+    activations = [[0.5, 0.1, 0.9, 0.2, 1, 0.8, 0.4], [0.7, 1, 0.2, 0.7, 0.3], [0, 0.8, 0.2, 1, 0.4, 0.6], [1, 0, 0.4]]
+    self.play(network.forward_with_activation(activations))
+    self.wait()
+
+    network.set_error_positions(activations)
+    activations = [[0.5, 0.1, 0.9, 0.2, 1, 0.8, 0.4], [0.5, 0.2, 0.5, 0.6, 0.7], [0.7, 0.5, 0.1, 0.1, 0.8, 1], [0.2, 0.8, 0.7]]
+    self.play(network.backward(activations))
+    self.wait()
+
+    self.play(AnimationGroup(*[FadeOut(o) for o in network.get_moabs()]))
+    self.wait()
 
 def spring_interp (x: float) -> float:
   """
