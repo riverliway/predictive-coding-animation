@@ -198,10 +198,12 @@ class spring(Scene):
     """
     base = RoundedRectangle(corner_radius=0.1, sheen_factor=0.2, sheen_direction=[-1, -1, 0], color=BLACK, stroke_color=BASEPLATE_OUTLINE, stroke_width=2, width=1.5, height=2)
     base = base.set_opacity(1).apply_matrix([[1, 1], [0, 2]])
+    global rect1
     rect1 = base.copy().shift(1.3 * DOWN + 3 * LEFT)
+    global rect2
     rect2 = base.copy().shift(1.3 * DOWN + 0 * LEFT)
+    global rect3
     rect3 = base.copy().shift(1.3 * DOWN, 3 * RIGHT)
-    self.add(rect1, rect2, rect3)
 
     global pole1
     pole1 = Rectangle(color=POLE_COLOR, width=0.1, height=POLE_HEIGHT, stroke_width=0).set_opacity(0.6).shift(rect1.get_center()).shift(UP * POLE_HEIGHT / 2)
@@ -211,8 +213,6 @@ class spring(Scene):
     pole3 = pole2.copy().shift(RIGHT * 3.75 + POLE_HEIGHT / 2 * UP)
     global pole4
     pole4 = pole2.copy().shift(RIGHT * 2.25 + POLE_HEIGHT / 2 * DOWN)
-
-    self.add(pole1, pole2, pole3, pole4)
 
     return [s.get_center() + UP * POLE_HEIGHT / 2 for s in [pole1, pole2, pole3, pole4]]
 
@@ -230,13 +230,12 @@ class spring(Scene):
     neuron3 = neuron.copy().shift(neuron_locations[3]).set(fill_color=active_color(activations[3]))
     neurons = [neuron0, neuron1, neuron2, neuron3]
 
-    self.play(AnimationGroup(*[Create(n) for n in neurons], lag_ratio=0.1))
-
     weight0 = Line(start=neuron0.get_center(), end=neuron1.get_center(), color=WEIGHT_COLOR, stroke_width=2)
     weight1 = Line(start=neuron1.get_center(), end=neuron2.get_center(), color=WEIGHT_COLOR, stroke_width=2)
     weight2 = Line(start=neuron1.get_center(), end=neuron3.get_center(), color=WEIGHT_COLOR, stroke_width=2)
 
-    self.play(AnimationGroup(Create(weight0), Create(VGroup(weight1, weight2), lag_ratio=0), lag_ratio=0.3))
+    objs = [rect1, rect2, rect3, pole1, pole2, pole3, pole4, neuron0, neuron1, neuron2, neuron3, weight0, weight1, weight2]
+    self.play(AnimationGroup(*[FadeIn(o) for o in objs]))
 
     return neurons, [weight0, weight1, weight2]
 
@@ -267,9 +266,9 @@ class spring(Scene):
     pin0 = pin.copy().shift(neuron_locations[0])
     pin1 = pin.copy().shift(neuron_locations[3])
     pin2 = pin.copy().shift(neuron_locations[2])
-    c0 = Create(pin0)
-    c1 = Create(pin1)
-    c2 = Create(pin2)
+    c0 = FadeIn(pin0, shift=DOWN * 0.3)
+    c1 = FadeIn(pin1, shift=DOWN * 0.3)
+    c2 = FadeIn(pin2, shift=DOWN * 0.3)
 
     # It is kinda stupid that we have to reset the z-index, but it breaks if we don't
     pin0.set_z_index(26)
@@ -343,6 +342,9 @@ pole1 = None
 pole2 = None
 pole3 = None
 pole4 = None
+rect1 = None
+rect2 = None
+rect3 = None
 
 def get_activation(neuron: Circle) -> float:
   """
