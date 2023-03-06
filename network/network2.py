@@ -1,12 +1,15 @@
 """
 A different scene that renders the PCN
-manim render -pqh network.py network
-manim render -pqh network.py classical
+manim render -pqh network2.py network
+manim render -pqh network2.py classical
 """
 
 from typing import Callable, Literal
 from manim import *
 import math
+import random
+
+random.seed(54356)
 
 INACTIVE_COLOR = '#ee7c31'
 WEIGHT_COLOR = '#5b9bd5'
@@ -16,7 +19,7 @@ FONT = 'Lato'
 FONT_SIZE = 26
     
 class Network:
-  def __init__(self, layer_dims: list[int], add, horz_space = 3, vert_space = 2):
+  def __init__(self, layer_dims: list[int], add, horz_space = 3, vert_space = 2, ellipsis = False, max_weight_opacity=1):
     self.layer_dims = layer_dims
     self.horz_space = horz_space
     self.vert_space = vert_space
@@ -27,11 +30,24 @@ class Network:
     self.pulses = []
     self.trails = []
 
+    # Move neurons to their correct location
     for (i, layer) in enumerate(self.calc_neuron_pos(layer_dims, horz_space, vert_space)):
       for (j, pos) in enumerate(layer):
         self.neurons[i][j].shift(pos)
 
-    weight: Callable[[Neuron, Neuron], Line] = lambda ln, rn: Line(start=ln.get_circle().get_center(), end=rn.get_circle().get_center(), color=WEIGHT_COLOR, stroke_width=2).set_z_index(12)
+    # If we have an ellipsis, shift the first layer away
+    self.ellipsis = []
+    if ellipsis:
+      layer_half = len(self.neurons[0]) // 2
+      halfway = (self.neurons[0][layer_half].get_circle().get_center() + self.neurons[0][layer_half - 1].get_circle().get_center()) / 2
+      self.ellipsis = [Dot(halfway + d) for d in [UP * vert_space / 2, ORIGIN, DOWN * vert_space / 2]]
+      for (i, n) in enumerate(self.neurons[0]):
+        if (i < layer_half):
+          n.shift(UP * vert_space)
+        else:
+          n.shift(DOWN * vert_space)
+
+    weight: Callable[[Neuron, Neuron], Line] = lambda ln, rn: Line(start=ln.get_circle().get_center(), end=rn.get_circle().get_center(), color=WEIGHT_COLOR, stroke_width=2).set_z_index(12).set_opacity(random.uniform(0, max_weight_opacity))
     self.weights: list[list[list[Line]]] = [[[weight(ln, rn) for ln in self.neurons[i]] for rn in self.neurons[i + 1]] for i in range(len(self.neurons) - 1)]
 
   def calc_neuron_pos(self, layer_dims: list[int], horz_space, vert_space):
@@ -58,6 +74,18 @@ class Network:
 
   def get_weights(self):
     return self.weights
+  
+  def clear_trails(self, remover):
+    # map(remover, self.pulses)
+    # map(remover, self.trails)
+    for p in self.pulses:
+      remover(p)
+
+    for t in self.trails:
+      remover(t)
+
+    self.pulses = []
+    self.trails = []
 
   def forward(self):
     """
@@ -76,14 +104,31 @@ class Network:
     weights = self.weights[layer]
     anims = []
     for weight in flat(weights):
-      pulse = Dot(weight.get_start(), radius=0.03, z_index=13, color=WHITE, fill_opacity=1)
-      trail = TracedPath(pulse.get_center, dissipating_time=0.25, z_index=13, stroke_color=WHITE, stroke_width=weight.get_stroke_width(), stroke_opacity=[1, 0])
-      self.add(pulse, trail)
-      self.pulses.append(pulse)
-      self.trails.append(trail)
-      anims.append(pulse.animate.shift(weight.get_end() - weight.get_start()))
+      anims.append(self.__create_pulse(weight))
 
     return AnimationGroup(*anims)
+  
+  def __create_pulse(self, weight: Line, backwards = False):
+    """
+    Creates the pulse animation for a weight
+    """
+    width = self.neurons[0][0].get_circle().width
+    pulse_width = width / 16
+    width -= pulse_width
+    trail = Line(LEFT * width / 2, RIGHT * width / 2, stroke_width=weight.get_stroke_width())
+    trail.set_opacity(opacity=[weight.get_stroke_opacity(), 0])
+
+    start = weight.get_end() if backwards else weight.get_start()
+    end = weight.get_start() if backwards else weight.get_end()
+
+    trail.rotate(math.atan2(end[1] - start[1], end[0] - start[0]))
+    trail.shift(start)
+    pulse = Dot(trail.get_end(), radius=pulse_width, fill_opacity=weight.get_stroke_opacity())
+
+    self.pulses.append(pulse)
+    self.trails.append(trail)
+
+    return AnimationGroup(trail.animate.shift(end - start), pulse.animate.shift(end - start))
 
   def backward_prop(self, layer):
     """
@@ -92,12 +137,7 @@ class Network:
     weights = self.weights[layer]
     anims = []
     for weight in flat(weights):
-      pulse = Dot(weight.get_end(), radius=0.03, z_index=13, color=WHITE, fill_opacity=1)
-      trail = TracedPath(pulse.get_center, dissipating_time=0.25, z_index=13, stroke_color=WHITE, stroke_width=weight.get_stroke_width(), stroke_opacity=[0, 1])
-      self.add(pulse, trail)
-      self.pulses.append(pulse)
-      self.trails.append(trail)
-      anims.append(pulse.animate.shift(weight.get_start() - weight.get_end()))
+      anims.append(self.__create_pulse(weight, backwards = True))
 
     return AnimationGroup(*anims)
 
@@ -140,7 +180,7 @@ class Network:
 
   def get_moabs(self):
     neuronMoabs = [n.get_moabs() for n in flat(self.neurons)]
-    return flat([neuronMoabs, self.weights, self.pulses, self.trails])
+    return flat([neuronMoabs, self.weights, self.pulses, self.trails, self.ellipsis])
 
   def set_activations(self, activations: list[list[float]]):
     """
@@ -475,23 +515,70 @@ class network(Scene):
 
 class classical(Scene):
   def construct(self):
-    network = Network([7, 5, 5, 3], self.add, vert_space=1.25)
+    dims = [16, 16, 16, 10]
+    network = Network(dims, self.add, vert_space=1.25, horz_space=6, ellipsis=True, max_weight_opacity=0.4)
     network.disable_error()
     new_moabs = Group(*network.get_moabs())
-    new_moabs.scale(0.8)
-    self.play(FadeIn(new_moabs))
+    new_moabs.scale(0.25)
+    new_moabs.shift(DOWN)
+    training_label = label('Training...', 'left').shift(LEFT * 6.5 + UP * 3)
 
-    activations = [[0.5, 0.1, 0.9, 0.2, 1, 0.8, 0.4], [0.7, 1, 0.2, 0.7, 0.3], [0, 0.8, 0.2, 1, 0.4, 0.6], [1, 0, 0.4]]
-    self.play(network.forward_with_activation(activations))
+    left_brace_moabs = Group(network.neurons[0][0].get_circle(), network.neurons[0][-1].get_circle())
+    left_brace = Brace(left_brace_moabs, direction=LEFT, sharpness=1)
+    left_label = label('256 Input Pixels', 'right').shift(left_brace.get_center() + 0.3 * LEFT)
+    right_brace_moabs = Group(network.neurons[-1][0].get_circle(), network.neurons[-1][-1].get_circle())
+    right_brace = Brace(right_brace_moabs, direction=RIGHT, sharpness=1)
+    right_label = label('10 Output Categories', 'left').shift(right_brace.get_center() + 0.3 * RIGHT)
+    top_brace_moabs = Group(network.neurons[1][0].get_circle(), network.neurons[-2][0].get_circle())
+    top_brace = Brace(top_brace_moabs, direction=UP, sharpness=1)
+    top_label = label('2 Hidden Layers', 'center').shift(top_brace.get_center() + 0.35 * UP)
+
+    first_image = ImageMobject('./7.png')
+    first_image.set_resampling_algorithm(RESAMPLING_ALGORITHMS['nearest'])
+    first_image.scale(9).shift(UP * 3 + 1.5 * LEFT)
+
+    arrow = Arrow(UP * 3 + LEFT, UP * 3 + RIGHT)
+    output = label('7', 'center').scale(2).shift(3 * UP + 1.5 * RIGHT)
+
+    self.play(FadeIn(new_moabs, left_brace, right_brace, top_brace, left_label, right_label, top_label))
     self.wait()
+    self.play(FadeOut(left_brace, right_brace, top_brace, left_label, right_label, top_label), FadeIn(training_label, first_image, arrow, output))
+
+    activations = random_matrix(dims)
+    output_vec = [0.13, 0.1, 0.4, 0.01, 0.2, 0.3, 0, 0.95, 0.1, 0.45]
+    activations[-1] = [1 - i for i in output_vec]
+    self.play(network.forward_with_activation(activations))
+    network.clear_trails(self.remove)
+    self.wait()
+
+    output_labels = [label(str(i), 'center').shift(n.get_circle().get_center() + RIGHT * 0.5).scale(0.7) for (i, n) in enumerate(network.neurons[-1])]
+    self.play(FadeIn(*output_labels))
 
     network.set_error_positions(activations)
-    activations = [[0.5, 0.1, 0.9, 0.2, 1, 0.8, 0.4], [0.5, 0.2, 0.5, 0.6, 0.7], [0.7, 0.5, 0.1, 0.1, 0.8, 1], [0.2, 0.8, 0.7]]
+    activations = [activations[0]] + random_matrix(dims[1:-1]) + [[1, 1, 1, 1, 1, 1, 1, 0, 1, 1]]
     self.play(network.backward(activations))
+    network.clear_trails(self.remove)
     self.wait()
 
-    self.play(AnimationGroup(*[FadeOut(o) for o in network.get_moabs()]))
+    self.play(FadeOut(new_moabs, training_label, first_image, arrow, output, *output_labels))
     self.wait()
+
+def label (text: str, align: Literal['left', 'center', 'right']) -> Text:
+  txt = Text(text, font='Lato', font_size=26)
+  if align == 'left':
+    txt.shift(txt.get_center() - txt.get_left())
+  if align == 'right':
+    txt.shift(txt.get_center() - txt.get_right())
+  return txt
+
+def random_matrix (lens: list[int]) -> list[list[float]]:
+  return [random_array(i) for i in lens]
+
+def random_array (len: int) -> list[float]:
+  """
+  Returns an array of random numbers between 0 and 1
+  """
+  return [random.uniform(0, 1) for _ in range(len)]
 
 def spring_interp (x: float) -> float:
   """
@@ -501,8 +588,12 @@ def spring_interp (x: float) -> float:
   return (pow(2, -10 * nx) * math.sin(50 * nx) + 1.476) * 0.335 + 0.50645
 
 def flat(list_of_lists):
-  if len(list_of_lists) == 0:
+  if not isinstance(list_of_lists, list):
     return list_of_lists
-  if isinstance(list_of_lists[0], list):
-    return flat(list_of_lists[0]) + flat(list_of_lists[1:])
-  return list_of_lists[:1] + flat(list_of_lists[1:])
+  ret = []
+  for i in list_of_lists:
+    if not isinstance(i, list):
+      ret.append(i)
+    else:
+      ret += flat(i)
+  return ret
