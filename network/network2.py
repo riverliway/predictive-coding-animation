@@ -523,6 +523,31 @@ class classical(Scene):
     new_moabs.shift(DOWN)
     training_label = label('Training...', 'left').shift(LEFT * 6.5 + UP * 3)
 
+    first_image = ImageMobject('./7.png')
+    pixels = first_image.get_pixel_array()
+    print(len(pixels))
+    pixels = [[pixel[0] for pixel in col] for col in pixels]
+    first_image.set_resampling_algorithm(RESAMPLING_ALGORITHMS['nearest'])
+    first_image.scale(11).move_to((network.neurons[0][0].get_circle().get_center() + network.neurons[0][-1].get_circle().get_center()) / 2 + LEFT * 2)
+    pixel_radius = (first_image.get_left() - first_image.get_right())[0] / len(pixels) / 2
+    create_pixel = lambda pixel, x, y: Circle(radius=pixel_radius, stroke_color=WHITE, color=interpolate_color(BLACK, WHITE, pixel / 255), stroke_width=0.5).shift(x * pixel_radius * 2 * LEFT + y * pixel_radius * 2 * UP).set_opacity(1)
+    pixels = [[create_pixel(pixel, x, y) for (x, pixel) in enumerate(col)] for (y, col) in enumerate(pixels)]
+    pixel_group = Group(*flat(pixels))
+    pixel_group.move_to(first_image)
+
+    self.play(FadeIn(new_moabs, first_image, pixel_group))
+    self.wait()
+
+    network_first_layer_distance = abs(network.neurons[0][-1].get_circle().get_center()[1] - network.neurons[0][0].get_circle().get_center()[1])
+    move_pixel_location = lambda i, len: network.neurons[0][0].get_circle().get_center() + network_first_layer_distance * i / len * DOWN
+    pixel_move_anims = [pixel.animate.move_to(move_pixel_location(i, len(flat(pixels)))).set_opacity(0) for (i, pixel) in enumerate(flat(pixels))]
+
+    self.play(AnimationGroup(*pixel_move_anims, lag_ratio=0.01))
+
+    self.wait()
+
+    self.play(first_image.animate.move_to(UP * 3 + 1.5 * LEFT).scale(9 / 11))
+
     left_brace_moabs = Group(network.neurons[0][0].get_circle(), network.neurons[0][-1].get_circle())
     left_brace = Brace(left_brace_moabs, direction=LEFT, sharpness=1)
     left_label = label('256 Input Pixels', 'right').shift(left_brace.get_center() + 0.3 * LEFT)
@@ -533,25 +558,23 @@ class classical(Scene):
     top_brace = Brace(top_brace_moabs, direction=UP, sharpness=1)
     top_label = label('2 Hidden Layers', 'center').shift(top_brace.get_center() + 0.35 * UP)
 
-    first_image = ImageMobject('./7.png')
-    first_image.set_resampling_algorithm(RESAMPLING_ALGORITHMS['nearest'])
-    first_image.scale(9).shift(UP * 3 + 1.5 * LEFT)
-
     arrow = Arrow(UP * 3 + LEFT, UP * 3 + RIGHT)
     output = label('7', 'center').scale(2).shift(3 * UP + 1.5 * RIGHT)
 
-    self.play(FadeIn(new_moabs, left_brace, right_brace, top_brace, left_label, right_label, top_label))
+    self.play(FadeIn(left_brace, right_brace, top_brace, left_label, right_label, top_label, arrow, output))
     self.wait()
-    self.play(FadeOut(left_brace, right_brace, top_brace, left_label, right_label, top_label), FadeIn(training_label, first_image, arrow, output))
+    self.play(FadeOut(left_brace, right_brace, top_brace, left_label, right_label, top_label), FadeIn(training_label))
 
     activations = random_matrix(dims)
     output_vec = [0.13, 0.1, 0.4, 0.01, 0.2, 0.3, 0, 0.95, 0.1, 0.45]
     activations[-1] = [1 - i for i in output_vec]
+    activations[0] = [1 for _ in activations[0]]
     self.play(network.forward_with_activation(activations))
     network.clear_trails(self.remove)
     self.wait()
 
-    output_labels = [label(str(i), 'center').shift(n.get_circle().get_center() + RIGHT * 0.5).scale(0.7) for (i, n) in enumerate(network.neurons[-1])]
+    output_labels = [label(str(i), 'center').shift(n.get_circle().get_center() + RIGHT * 0.5).scale(0.7).set_opacity(0.5) for (i, n) in enumerate(network.neurons[-1])]
+    output_labels[7].set_opacity(1)
     self.play(FadeIn(*output_labels))
 
     network.set_error_positions(activations)
@@ -560,7 +583,32 @@ class classical(Scene):
     network.clear_trails(self.remove)
     self.wait()
 
-    self.play(FadeOut(new_moabs, training_label, first_image, arrow, output, *output_labels))
+    # Begin second train
+    activations = [[1 for _ in layer] for layer in activations]
+    self.play(AnimationGroup(FadeOut(first_image, arrow, output, *output_labels), network.animate_activations(activations)))
+    self.play(network.animate_error_positions(activations))
+
+    second_image = ImageMobject('./2.png')
+    second_image.set_resampling_algorithm(RESAMPLING_ALGORITHMS['nearest'])
+    second_image.scale(9).move_to(UP * 3 + 1.5 * LEFT)
+
+    output = label('2', 'center').scale(2).shift(3 * UP + 1.5 * RIGHT)
+
+    self.play(FadeIn(second_image, arrow, output))
+
+    activations = random_matrix(dims)
+    output_vec = [0, 0.95, 0.1, 0.11, 0.4, 0.22, 0.8, 0.12, 0.13, 0.3]
+    activations[-1] = [1 - i for i in output_vec]
+    activations[0] = [1 for _ in activations[0]]
+    self.play(network.forward_with_activation(activations))
+    network.clear_trails(self.remove)
+    self.wait()
+
+    output_labels = [label(str(i), 'center').shift(n.get_circle().get_center() + RIGHT * 0.5).scale(0.7).set_opacity(0.5) for (i, n) in enumerate(network.neurons[-1])]
+    output_labels[2].set_opacity(1)
+    self.play(FadeIn(*output_labels))
+
+    self.play(FadeOut(new_moabs, training_label, *output_labels))
     self.wait()
 
 def label (text: str, align: Literal['left', 'center', 'right']) -> Text:
