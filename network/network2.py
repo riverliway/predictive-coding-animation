@@ -9,8 +9,6 @@ from manim import *
 import math
 import random
 
-random.seed(54356)
-
 INACTIVE_COLOR = '#ee7c31'
 WEIGHT_COLOR = '#5b9bd5'
 BASEPLATE_COLOR = '##0f0f0f'
@@ -271,6 +269,30 @@ class Network:
     for n in flat(self.neurons):
       n.disable_error()
 
+  def store_reset_position(self):
+    """
+    Stores the reset position for the network
+    """
+    for n in flat(self.neurons):
+      n.store_reset_position()
+
+  def reset_error(self):
+    """
+    Stores the reset position for the network
+    """
+    for n in flat(self.neurons):
+      n.reset_error()
+
+  def reset_network(self):
+    """
+    Resets an entire network
+    """
+    anims = []
+    for n in flat(self.neurons):
+      anims.append(n.reset_neuron())
+
+    return AnimationGroup(*anims)
+
 class Neuron:
   def __init__(self):
     # For neuron activity, 1 is high on the pole, white. 0 is low on the pole, orange
@@ -281,6 +303,27 @@ class Neuron:
     self.errorPos = 0
     self.errorScale = 1
     self.error_enabled = True
+
+  def store_reset_position(self):
+    """
+    Stores the error postition for when the neuron resets later
+    """
+    self.errorCircleCopy = self.errorCircle.copy()
+
+  def reset_neuron(self):
+    """
+    Animates the neuron resetting, the error and postion returning to the white spot
+    """
+    self.error_enabled = False
+    self.errorPos = 0
+
+    anim = AnimationGroup(Transform(self.errorCircle, self.errorCircleCopy), self.animate_activation(1, rate_functions.smooth))
+    self.errorPos = 0
+    self.errorScale = 1
+    return anim
+  
+  def reset_error(self):
+    self.errorCircle = self.errorCircleCopy
 
   def create_pin(self):
     """
@@ -515,12 +558,14 @@ class network(Scene):
 
 class classical(Scene):
   def construct(self):
+    random.seed(54356)
     dims = [16, 16, 16, 10]
     network = Network(dims, self.add, vert_space=1.25, horz_space=6, ellipsis=True, max_weight_opacity=0.4)
     network.disable_error()
     new_moabs = Group(*network.get_moabs())
     new_moabs.scale(0.25)
     new_moabs.shift(DOWN)
+    network.store_reset_position()
     training_label = label('Training...', 'left').shift(LEFT * 6.5 + UP * 3)
 
     first_image = ImageMobject('./7.png')
@@ -584,9 +629,19 @@ class classical(Scene):
     self.wait()
 
     # Begin second train
-    activations = [[1 for _ in layer] for layer in activations]
-    self.play(AnimationGroup(FadeOut(first_image, arrow, output, *output_labels), network.animate_activations(activations)))
-    self.play(network.animate_error_positions(activations))
+    random.seed(54356)
+    old_network_moabs = new_moabs
+    old_networks = network
+    network = Network(dims, self.add, vert_space=1.25, horz_space=6, ellipsis=True, max_weight_opacity=0.4)
+    network.disable_error()
+    new_moabs = Group(*network.get_moabs())
+    new_moabs.scale(0.25)
+    new_moabs.shift(DOWN)
+    network.store_reset_position()
+
+    self.play(AnimationGroup(FadeOut(first_image, arrow, output, *output_labels), old_networks.reset_network()))
+
+    self.play(AnimationGroup(FadeOut(old_network_moabs, rate_func=rate_functions.linear), FadeIn(new_moabs, rate_func=rate_functions.linear), rate_func=rate_functions.linear))
 
     second_image = ImageMobject('./2.png')
     second_image.set_resampling_algorithm(RESAMPLING_ALGORITHMS['nearest'])
@@ -597,7 +652,7 @@ class classical(Scene):
     self.play(FadeIn(second_image, arrow, output))
 
     activations = random_matrix(dims)
-    output_vec = [0, 0.95, 0.1, 0.11, 0.4, 0.22, 0.8, 0.12, 0.13, 0.3]
+    output_vec = [0, 0.1, 0.95, 0.11, 0.4, 0.22, 0.3, 0.12, 0.13, 0.3]
     activations[-1] = [1 - i for i in output_vec]
     activations[0] = [1 for _ in activations[0]]
     self.play(network.forward_with_activation(activations))
@@ -608,7 +663,53 @@ class classical(Scene):
     output_labels[2].set_opacity(1)
     self.play(FadeIn(*output_labels))
 
-    self.play(FadeOut(new_moabs, training_label, *output_labels))
+    network.set_error_positions(activations)
+    activations = [activations[0]] + random_matrix(dims[1:-1]) + [[1, 1, 0, 1, 1, 1, 1, 1, 1, 1]]
+    self.play(network.backward(activations))
+    network.clear_trails(self.remove)
+    self.wait()
+
+    # Begin third train
+    random.seed(54356)
+    old_network_moabs2 = new_moabs
+    old_networks = network
+    network = Network(dims, self.add, vert_space=1.25, horz_space=6, ellipsis=True, max_weight_opacity=0.4)
+    network.disable_error()
+    new_moabs = Group(*network.get_moabs())
+    new_moabs.scale(0.25)
+    new_moabs.shift(DOWN)
+    network.store_reset_position()
+
+    self.play(AnimationGroup(FadeOut(second_image, arrow, output, *output_labels), old_networks.reset_network()))
+    self.play(AnimationGroup(FadeOut(old_network_moabs2, rate_func=rate_functions.linear), FadeIn(new_moabs, rate_func=rate_functions.linear), rate_func=rate_functions.linear))
+
+    third_image = ImageMobject('./9.png')
+    third_image.set_resampling_algorithm(RESAMPLING_ALGORITHMS['nearest'])
+    third_image.scale(9).move_to(UP * 3 + 1.5 * LEFT)
+
+    output = label('9', 'center').scale(2).shift(3 * UP + 1.5 * RIGHT)
+
+    self.play(FadeIn(third_image, arrow, output))
+
+    activations = random_matrix(dims)
+    output_vec = [0.31, 0.4, 0.15, 0.01, 0.02, 0.22, 0.1, 0.31, 0.23, 0.8]
+    activations[-1] = [1 - i for i in output_vec]
+    activations[0] = [1 for _ in activations[0]]
+    self.play(network.forward_with_activation(activations))
+    network.clear_trails(self.remove)
+    self.wait()
+
+    output_labels = [label(str(i), 'center').shift(n.get_circle().get_center() + RIGHT * 0.5).scale(0.7).set_opacity(0.5) for (i, n) in enumerate(network.neurons[-1])]
+    output_labels[9].set_opacity(1)
+    self.play(FadeIn(*output_labels))
+
+    network.set_error_positions(activations)
+    activations = [activations[0]] + random_matrix(dims[1:-1]) + [[1, 1, 1, 1, 1, 1, 1, 1, 1, 0]]
+    self.play(network.backward(activations))
+    network.clear_trails(self.remove)
+    self.wait()
+
+    self.play(FadeOut(new_moabs, training_label, *output_labels, third_image, arrow, output))
     self.wait()
 
 def label (text: str, align: Literal['left', 'center', 'right']) -> Text:
